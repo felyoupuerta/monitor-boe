@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 BOE Monitor - Analizador del Boletín Oficial del Estado
-Monitorea cambios diarios en el BOE y envía notificaciones por correo
-Versión Mejorada con Base de Datos
+Felipe Angeriz 30-01-2026
+
 """
 
 import requests

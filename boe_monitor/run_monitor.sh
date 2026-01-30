@@ -1,21 +1,31 @@
 #!/bin/bash
-# Script para ejecutar el monitor del BOE con logging
-
-# Directorio del script
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# ESOT LO PUSE EN /OPT PARA METERLO EN EL CRONTAB DE ROOT Y AUTOMATIZAR LA EJECUCIÓN
+DIR="$( cd "/home/felipe/Documents/monitor-boe/boe_monitor" && pwd )"
 cd "$DIR"
 
-# Crear directorio de logs si no existe
+
 mkdir -p logs
 
-# Nombre del archivo de log con fecha
+
 LOG_FILE="logs/boe_monitor_$(date +%Y%m%d).log"
 
-# Ejecutar el monitor y guardar salida
+# Activar venv
+if [ -f "$DIR/venv/bin/activate" ]; then
+    source "$DIR/venv/bin/activate"
+else
+    echo "ERROR: no se encontró el venv en $DIR/venv" >> "$LOG_FILE"
+    exit 1
+fi
+
+# Ejecutar el monitor
 echo "=== Inicio de ejecución: $(date) ===" >> "$LOG_FILE"
-python3 boe_analyzer.py >> "$LOG_FILE" 2>&1
-echo "=== Fin de ejecución: $(date) ===" >> "$LOG_FILE"
+python main.py >> "$LOG_FILE" 2>&1
+STATUS=$?
+echo "=== Fin de ejecución: $(date), exit code: $STATUS ===" >> "$LOG_FILE"
 echo "" >> "$LOG_FILE"
 
-# Limpiar logs antiguos (más de 30 días)
+# Limpiar logs
 find logs/ -name "boe_monitor_*.log" -mtime +30 -delete
+
+# Salir con el Python
+exit $STATUS
