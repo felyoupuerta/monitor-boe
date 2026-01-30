@@ -1,0 +1,21 @@
+{
+  "recipient_email": "felipe.angeriz.e@gmail.com",
+  "smtp_config": {
+    "server": "smtp.gmail.com",
+    "port": 587,
+    "username": "felipe.angeriz.e@gmail.com",
+    "password": "rtyr opyl zege ezuj"
+  },
+  "data_dir": "./boe_data",
+  "notifications": {
+    "send_if_no_changes": false,
+    "max_items_in_email": 20
+  },
+  "db_config": {
+    "host": "localhost",
+    "user": "boe_monitor",
+    "password": "secure_boe_password",
+    "database": "boe_monitor",
+    "port": 3306
+  }
+}

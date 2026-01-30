@@ -1,0 +1,14 @@
+{
+  "recipient_email": "tu_email@ejemplo.com",
+  "smtp_config": {
+    "server": "smtp.gmail.com",
+    "port": 587,
+    "username": "tu_email@gmail.com",
+    "password": "tu_contraseña_de_aplicacion"
+  },
+  "data_dir": "./boe_data",
+  "notifications": {
+    "send_if_no_changes": false,
+    "max_items_in_email": 20
+  }
+}
