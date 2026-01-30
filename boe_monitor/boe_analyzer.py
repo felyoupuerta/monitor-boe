@@ -88,12 +88,13 @@ class BOEMonitor:
     def save_day_data(self, items, date_obj):
         """
         Guarda los items del día en la Base de Datos
+        Retorna la lista de items nuevos guardados
         """
-        count = 0
+        new_items = []
         for item in items:
             if self.db.save_publication(item, date_obj):
-                count += 1
-        return count
+                new_items.append(item)
+        return new_items
     
     def load_day_data(self, date_obj):
         """
@@ -123,23 +124,25 @@ class BOEMonitor:
             'has_changes': len(new_items) > 0 or len(removed_items) > 0
         }
     
-    def send_email_notification(self, changes, recipient_email, smtp_config):
+    def send_email_notification(self, items, recipient_email, smtp_config, has_changes=True):
         """
-        Envía notificación por correo con los cambios detectados
-        smtp_config debe contener: server, port, username, password
+        Envía notificación por correo con los cambios detectados o mensaje de sin cambios.
+        items: Lista de items nuevos (si has_changes=True) o vacía.
         """
-        if not changes or not changes['has_changes']:
-            print("No hay cambios para notificar")
-            return False
         
         # Crear mensaje
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = f"🔔 Cambios en el BOE - {datetime.now().strftime('%d/%m/%Y')}"
+        
+        if has_changes:
+            msg['Subject'] = f"🔔 Novedades en el BOE - {datetime.now().strftime('%d/%m/%Y')}"
+        else:
+            msg['Subject'] = f"📋 Estado del BOE - {datetime.now().strftime('%d/%m/%Y')}"
+            
         msg['From'] = smtp_config['username']
         msg['To'] = recipient_email
         
         # Crear contenido HTML
-        html_content = self.create_email_html(changes)
+        html_content = self.create_email_html(items, has_changes)
         
         # Adjuntar HTML
         html_part = MIMEText(html_content, 'html', 'utf-8')
@@ -158,10 +161,12 @@ class BOEMonitor:
             print(f"❌ Error al enviar correo: {e}")
             return False
     
-    def create_email_html(self, changes):
+    def create_email_html(self, items, has_changes=True):
         """
-        Crea el contenido HTML del correo con los cambios
+        Crea el contenido HTML del correo
         """
+        date_str = datetime.now().strftime('%d de %B de %Y')
+        
         html = f"""
         <html>
         <head>
@@ -174,34 +179,34 @@ class BOEMonitor:
                 .item-title {{ font-weight: bold; color: #003d6a; }}
                 .item-meta {{ font-size: 0.9em; color: #666; }}
                 .new {{ border-left: 4px solid #28a745; }}
-                .removed {{ border-left: 4px solid #dc3545; }}
                 a {{ color: #003d6a; text-decoration: none; }}
             </style>
         </head>
         <body>
             <div class="header">
                 <h1>📋 Monitor BOE</h1>
-                <p>Cambios detectados el {datetime.now().strftime('%d de %B de %Y')}</p>
-            </div>
-            
-            <div class="summary">
-                <h3>📊 Resumen</h3>
-                <ul>
-                    <li><strong>Nuevas publicaciones:</strong> {len(changes['new_items'])}</li>
-                    <li><strong>Publicaciones eliminadas:</strong> {len(changes['removed_items'])}</li>
-                    <li><strong>Total hoy:</strong> {changes['total_today']}</li>
-                    <li><strong>Total ayer:</strong> {changes['total_yesterday']}</li>
-                </ul>
+                <p>Fecha: {date_str}</p>
             </div>
         """
         
-        # Nuevas publicaciones
-        if changes['new_items']:
+        if not has_changes:
             html += """
+            <div class="summary" style="border-left: 4px solid #666;">
+                <h3>ℹ️ Sin novedades</h3>
+                <p>El dia de hoy no hemos detectado novedades en el BOE Español.</p>
+            </div>
+            """
+        else:
+            html += f"""
+            <div class="summary">
+                <h3>📊 Resumen de Novedades</h3>
+                <p>Se han detectado <strong>{len(items)}</strong> nuevas publicaciones desde la última comprobación.</p>
+            </div>
+            
             <div class="section">
                 <h2>✨ Nuevas Publicaciones</h2>
             """
-            for item in changes['new_items'][:20]:  # Limitar a 20 items
+            for item in items[:50]:  # Limitar a 50 items para no saturar el correo
                 html += f"""
                 <div class="item new">
                     <div class="item-title">{item['titulo']}</div>
@@ -210,25 +215,7 @@ class BOEMonitor:
                         <strong>Departamento:</strong> {item['departamento']} | 
                         <strong>Rango:</strong> {item['rango']}
                     </div>
-                    {f'<a href="{item["url"]}" target="_blank">📄 Ver PDF</a>' if item['url'] else ''}
-                </div>
-                """
-            html += "</div>"
-        
-        # Publicaciones eliminadas
-        if changes['removed_items']:
-            html += """
-            <div class="section">
-                <h2>🗑️ Publicaciones Eliminadas</h2>
-            """
-            for item in changes['removed_items'][:10]:  # Limitar a 10 items
-                html += f"""
-                <div class="item removed">
-                    <div class="item-title">{item['titulo']}</div>
-                    <div class="item-meta">
-                        <strong>Sección:</strong> {item['seccion']} | 
-                        <strong>Departamento:</strong> {item['departamento']}
-                    </div>
+                    {f'<a href="{item["url"]}" target="_blank">📄 Ver PDF</a>' if item.get('url') else ''}
                 </div>
                 """
             html += "</div>"
@@ -246,9 +233,13 @@ class BOEMonitor:
     
     def run_daily_check(self, recipient_email, smtp_config):
         """
-        Ejecuta el chequeo diario completo
+        Ejecuta el chequeo diario:
+        1. Descarga datos del BOE
+        2. Intenta guardar en BD
+        3. Si hay nuevos items -> Envía correo con cambios
+        4. Si no hay nuevos -> Envía correo indicando que no hay novedades
         """
-        print(f"🔍 Iniciando monitoreo del BOE con Base de Datos - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"🔍 Iniciando monitoreo del BOE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
         # Obtener BOE de hoy
         today = datetime.now()
@@ -261,44 +252,21 @@ class BOEMonitor:
             
         today_items = self.parse_boe_content(today_data['content'])
         
-        # Guardar en BD (idempotente)
-        saved_count = self.save_day_data(today_items, today)
-        print(f"✅ BOE de hoy procesado: {len(today_items)} items ({saved_count} nuevos en BD)")
+        # Guardar en BD y obtener items NUEVOS
+        new_items = self.save_day_data(today_items, today.date())
         
-        # Obtener BOE de ayer
-        yesterday = today - timedelta(days=1)
+        print(f"✅ BOE procesado: {len(today_items)} items totales. {len(new_items)} nuevos detectados.")
         
-        # Intentar cargar de BD
-        yesterday_items = self.load_day_data(yesterday)
-        
-        # Si no está en BD, y es la primera vez que corremos esto tras la migración,
-        # podríamos intentar descargarlo y guardarlo para tener historial.
-        if not yesterday_items:
-            print("⏳ No hay datos de ayer en BD. Intentando descargar histórico...")
-            yesterday_data = self.get_boe_summary(yesterday)
-            if yesterday_data:
-                yesterday_items = self.parse_boe_content(yesterday_data['content'])
-                self.save_day_data(yesterday_items, yesterday)
-                print(f"✅ Histórico recuperado: {len(yesterday_items)} items")
-        
-        changes = None
-        if yesterday_items:
-            changes = self.compare_items(today_items, yesterday_items)
-            
-            self.db.log_execution("success", 
-                                  changes['total_today'], 
-                                  len(changes['new_items']), 
-                                  len(changes['removed_items']), 
-                                  "Check completed")
+        # Log de ejecución
+        status = "success" if new_items else "no_changes"
+        self.db.log_execution(status, len(today_items), len(new_items), 0, "Check completed")
 
-            if changes and changes['has_changes']:
-                print(f"📊 Cambios detectados: {len(changes['new_items'])} nuevos, {len(changes['removed_items'])} eliminados")
-                # Enviar notificación
-                self.send_email_notification(changes, recipient_email, smtp_config)
-            else:
-                print("ℹ️ No se detectaron cambios significativos")
+        # Enviar notificación según resultados
+        if new_items:
+            print(f"📊 Novedades detectadas: {len(new_items)} items. Enviando correo...")
+            self.send_email_notification(new_items, recipient_email, smtp_config, has_changes=True)
         else:
-            print("⚠️ No hay datos de ayer para comparar (primera ejecución o error en histórico)")
-            self.db.log_execution("warning", len(today_items), 0, 0, "No yesterday data")
+            print("ℹ️ No se detectaron novedades. Enviando correo de confirmación...")
+            self.send_email_notification([], recipient_email, smtp_config, has_changes=False)
         
         return True
