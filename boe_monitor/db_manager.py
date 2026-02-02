@@ -4,10 +4,13 @@ import json
 from pathlib import Path
 
 class DatabaseManager:
-    def __init__(self, db_config):
+    def __init__(self, db_config, country_code='es'):
         self.config = db_config
         self.conn = None
         self.cursor = None
+        self.country_code = country_code.lower()
+        self.table_publications = f"publications_{self.country_code}"
+        self.table_logs = f"execution_logs_{self.country_code}"
 
     def connect(self):
         """Establishes connection to the database"""
@@ -23,7 +26,6 @@ class DatabaseManager:
             self.cursor = self.conn.cursor(dictionary=True)
             return True
         except mysql.connector.Error as err:
-            # If database doesn't exist, try to connect without db to create it
             if err.errno == 1049:  # Unknown database
                 return self.create_database()
             print(f"❌ Error de conexión a BD: {err}")
@@ -49,14 +51,14 @@ class DatabaseManager:
             return False
 
     def init_tables(self):
-        """Initialize database tables"""
+        """Initialize database tables for the specific country"""
         if not self.conn:
             if not self.connect():
                 return False
 
         try:
-            self.cursor.execute("""
-                CREATE TABLE IF NOT EXISTS publications (
+            self.cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self.table_publications} (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     boe_date DATE NOT NULL,
                     title MEDIUMTEXT NOT NULL,
@@ -70,8 +72,8 @@ class DatabaseManager:
                 )
             """)
 
-            self.cursor.execute("""
-                CREATE TABLE IF NOT EXISTS execution_logs (
+            self.cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self.table_logs} (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     execution_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     status VARCHAR(50),
@@ -82,7 +84,7 @@ class DatabaseManager:
                 )
             """)
             
-            print("✅ Tablas inicializadas correctamente.")
+            print(f"✅ Tablas inicializadas para '{self.country_code}'.")
             return True
         except mysql.connector.Error as err:
             print(f"❌ Error al crear tablas: {err}")
@@ -98,27 +100,23 @@ class DatabaseManager:
                  if not self.connect():
                      return False
             
-            # Check for duplicates (same title and date)
-            # Using MD5 of title for efficient querying if titles are long, 
-            # but for now simple checking is fine for this scale
-            
-            check_sql = "SELECT id FROM publications WHERE boe_date = %s AND title = %s LIMIT 1"
-            self.cursor.execute(check_sql, (date_obj, item['titulo']))
+            check_sql = f"SELECT id FROM {self.table_publications} WHERE boe_date = %s AND title = %s LIMIT 1"
+            self.cursor.execute(check_sql, (date_obj, item.get('titulo', '')))
             if self.cursor.fetchone():
-                return False  # Already exists
+                return False
 
-            sql = """
-                INSERT INTO publications 
+            sql = f"""
+                INSERT INTO {self.table_publications} 
                 (boe_date, title, section, department, rank_type, url_pdf) 
                 VALUES (%s, %s, %s, %s, %s, %s)
             """
             values = (
                 date_obj,
-                item['titulo'],
-                item['seccion'],
-                item['departamento'],
-                item['rango'],
-                item['url']
+                item.get('titulo', ''),
+                item.get('seccion', ''),
+                item.get('departamento', ''),
+                item.get('rango', ''),
+                item.get('url', '')
             )
             self.cursor.execute(sql, values)
             return True
@@ -136,11 +134,11 @@ class DatabaseManager:
                  if not self.connect():
                      return []
             
-            sql = """
+            sql = f"""
                 SELECT title as titulo, section as seccion, 
                        department as departamento, rank_type as rango, 
                        url_pdf as url
-                FROM publications 
+                FROM {self.table_publications} 
                 WHERE boe_date = %s
             """
             self.cursor.execute(sql, (date_obj,))
@@ -156,12 +154,11 @@ class DatabaseManager:
             
         try:
             if not self.cursor:
-                 # Don't try too hard for logs
                  if not self.connect():
                      return
 
-            sql = """
-                INSERT INTO execution_logs 
+            sql = f"""
+                INSERT INTO {self.table_logs} 
                 (status, items_found, new_items, removed_items, message) 
                 VALUES (%s, %s, %s, %s, %s)
             """
@@ -172,3 +169,4 @@ class DatabaseManager:
     def close(self):
         if self.conn:
             self.conn.close()
+

@@ -17,5 +17,28 @@
     "password": "secure_boe_password",
     "database": "boe_monitor",
     "port": 3306
+  },
+  "sources": {
+    "es": {
+      "name": "España",
+      "api_url_template": "https://www.boe.es/datosabiertos/api/boe/sumario/{date}",
+      "parser": "boe_xml",
+      "headers": {
+        "Accept": "application/xml"
+      }
+    },
+    "fr": {
+      "name": "Francia",
+      "url": "https://www.legifrance.gouv.fr",
+      "api_url_template": "https://www.legifrance.gouv.fr/jorf/jo",
+      "parser": "fr_legifrance_api",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "fr-FR,fr;q=0.9",
+        "Referer": "https://www.legifrance.gouv.fr/",
+        "Connection": "keep-alive"
+      }
+    }
   }
 }
