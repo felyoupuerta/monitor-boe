@@ -41,5 +41,10 @@ ARCHIVO EN CRONTAB DE ROOT(SE EJECUTA TODOS LOS DÍAS A LAS 8 DE LA MAÑANA):
             0 8 * * * /usr/bin/monesp
             0 8 * * * /usr/bin/monfr
 
-comando para pasar archivos de windows a UNIX(problemas con los espacios en blanco)
-dos2unix <nombre del archivo>
+
+
+
+EXTRA POR SI SE TRABAJA COMO YO EN WINDOWS Y UNIX(POR LAS DUDAS):
+            comando para pasar archivos de windows a UNIX(problemas con los espacios en blanco)
+            sudo pacman -S dos2unix
+            dos2unix <nombre del archivo>
