@@ -9,7 +9,7 @@ pip install -r requirements.txt
 nano config.json  
 
 
-###  📁 Estructura de archivos
+### Estructura de archivos
 
 boe_monitor/
 ├── main.py                  # Archivo main del proyecto, este importa a boe analyzer
@@ -19,7 +19,7 @@ boe_monitor/
 ├── boe_data/               # datos boe pasados
 │   ├── boe_20240101.json
 │   ├── boe_20240102.json
-│   └── ...
+│   └── +++
 └── logs/                   # Logs de ejecución
 
 

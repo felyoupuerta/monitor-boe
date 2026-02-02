@@ -32,7 +32,6 @@ class DatabaseManager:
     def create_database(self):
         """Creates the database if it doesn't exist"""
         try:
-            # Connect without database
             temp_conn = mysql.connector.connect(
                 host=self.config.get('host', 'localhost'),
                 user=self.config.get('user', 'root'),
@@ -44,7 +43,6 @@ class DatabaseManager:
             cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
             print(f"✅ Base de datos '{db_name}' creada.")
             temp_conn.close()
-            # Retry connection
             return self.connect()
         except mysql.connector.Error as err:
             print(f"❌ Error al crear BD: {err}")
@@ -57,7 +55,6 @@ class DatabaseManager:
                 return False
 
         try:
-            # Table: publications
             self.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS publications (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -73,7 +70,6 @@ class DatabaseManager:
                 )
             """)
 
-            # Table: execution_logs
             self.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS execution_logs (
                     id INT AUTO_INCREMENT PRIMARY KEY,

@@ -13,7 +13,6 @@ from pathlib import Path
 def test_email_config():
     """Prueba la configuración del correo"""
     
-    # Cargar configuración
     config_path = Path('config.json')
     if not config_path.exists():
         print("❌ Error: No se encuentra config.json")
@@ -37,7 +36,6 @@ def test_email_config():
     print("Intentando enviar correo de prueba...")
     print()
     
-    # Crear mensaje de prueba
     msg = MIMEMultipart('alternative')
     msg['Subject'] = "✅ Prueba de BOE Monitor - Configuración Correcta"
     msg['From'] = smtp_config['username']
@@ -90,7 +88,6 @@ def test_email_config():
     msg.attach(html_part)
     
     try:
-        # Conectar y enviar
         print("🔌 Conectando al servidor SMTP...")
         with smtplib.SMTP(smtp_config['server'], smtp_config['port'], timeout=10) as server:
             print("🔐 Iniciando conexión segura (TLS)...")

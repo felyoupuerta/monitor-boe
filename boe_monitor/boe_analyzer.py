@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """
 BOE Monitor - Analizador del Boletín Oficial del Estado
-Felipe Angeriz 30-01-2026
-
 """
 
 import requests
@@ -33,10 +31,8 @@ class BOEMonitor:
         if date is None:
             date = datetime.now()
         
-        # Formato de fecha para la URL del BOE: YYYYMMDD
         date_str = date.strftime("%Y%m%d")
         
-        # URL del sumario en formato XML (API de datos abiertos)
         url = f"{self.base_url}/datosabiertos/api/boe/sumario/{date_str}"
         
         headers = {
@@ -47,9 +43,7 @@ class BOEMonitor:
             response = requests.get(url, headers=headers, timeout=30)
             response.raise_for_status()
             
-            # Verificar que no sea una redirección a página de error (aunque raise_for_status debería pillar 4xx/5xx, a veces devuelven 200 con HTML)
             if "text/xml" not in response.headers.get('content-type', '') and not response.text.strip().startswith('<?xml'):
-                # Intento de fallback o comprobación
                 if "<!DOCTYPE html>" in response.text:
                      print(f"⚠️ Alerta: La respuesta para {date_str} parece ser HTML, no XML.")
                      return None
@@ -106,14 +100,11 @@ class BOEMonitor:
         """
         Compara dos listas de items y detecta cambios
         """
-        # Crear sets de títulos para comparación
-        today_titles = {item['titulo'] or item['titulo'] for item in today_items} # Handle case consistency? assuming raw strings match
+        today_titles = {item['titulo'] or item['titulo'] for item in today_items}
         yesterday_titles = {item['titulo'] or item['titulo'] for item in yesterday_items}
         
-        # Nuevas publicaciones
         new_items = [item for item in today_items if item['titulo'] not in yesterday_titles]
         
-        # Publicaciones eliminadas
         removed_items = [item for item in yesterday_items if item['titulo'] not in today_titles]
         
         return {
@@ -130,7 +121,6 @@ class BOEMonitor:
         items: Lista de items nuevos (si has_changes=True) o vacía.
         """
         
-        # Crear mensaje
         msg = MIMEMultipart('alternative')
         
         if has_changes:
@@ -141,15 +131,12 @@ class BOEMonitor:
         msg['From'] = smtp_config['username']
         msg['To'] = recipient_email
         
-        # Crear contenido HTML
         html_content = self.create_email_html(items, has_changes)
         
-        # Adjuntar HTML
         html_part = MIMEText(html_content, 'html', 'utf-8')
         msg.attach(html_part)
         
         try:
-            # Conectar al servidor SMTP
             with smtplib.SMTP(smtp_config['server'], smtp_config['port']) as server:
                 server.starttls()
                 server.login(smtp_config['username'], smtp_config['password'])
@@ -241,7 +228,6 @@ class BOEMonitor:
         """
         print(f"🔍 Iniciando monitoreo del BOE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
-        # Obtener BOE de hoy
         today = datetime.now()
         today_data = self.get_boe_summary(today)
         
@@ -252,16 +238,13 @@ class BOEMonitor:
             
         today_items = self.parse_boe_content(today_data['content'])
         
-        # Guardar en BD y obtener items NUEVOS
         new_items = self.save_day_data(today_items, today.date())
         
         print(f"✅ BOE procesado: {len(today_items)} items totales. {len(new_items)} nuevos detectados.")
         
-        # Log de ejecución
         status = "success" if new_items else "no_changes"
         self.db.log_execution(status, len(today_items), len(new_items), 0, "Check completed")
 
-        # Enviar notificación según resultados
         if new_items:
             print(f"📊 Novedades detectadas: {len(new_items)} items. Enviando correo...")
             self.send_email_notification(new_items, recipient_email, smtp_config, has_changes=True)

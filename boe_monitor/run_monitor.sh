@@ -1,15 +1,11 @@
 #!/bin/bash
-# ESOT LO PUSE EN /OPT PARA METERLO EN EL CRONTAB DE ROOT Y AUTOMATIZAR LA EJECUCIÓN
 DIR="$( cd "/home/felipe/Documents/monitor-boe/boe_monitor" && pwd )"
 cd "$DIR"
 
-
 mkdir -p logs
-
 
 LOG_FILE="logs/boe_monitor_$(date +%Y%m%d).log"
 
-# Activar venv
 if [ -f "$DIR/venv/bin/activate" ]; then
     source "$DIR/venv/bin/activate"
 else
@@ -17,15 +13,12 @@ else
     exit 1
 fi
 
-# Ejecutar el monitor
 echo "=== Inicio de ejecución: $(date) ===" >> "$LOG_FILE"
 python main.py >> "$LOG_FILE" 2>&1
 STATUS=$?
 echo "=== Fin de ejecución: $(date), exit code: $STATUS ===" >> "$LOG_FILE"
 echo "" >> "$LOG_FILE"
 
-# Limpiar logs
 find logs/ -name "boe_monitor_*.log" -mtime +30 -delete
 
-# Salir con el Python
 exit $STATUS

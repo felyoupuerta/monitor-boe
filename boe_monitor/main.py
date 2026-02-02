@@ -50,13 +50,10 @@ def main():
     print("=" * 60)
     print()
     
-    # Cargar configuración
     config = load_config()
     
-    # Crear directorio de datos si no existe
     data_dir = config.get('data_dir', './boe_data')
     
-    # Inicializar monitor
     db_config = config.get('db_config', {
         "host": "localhost",
         "user": "root",
@@ -66,7 +63,6 @@ def main():
     })
     monitor = BOEMonitor(db_config=db_config, data_dir=data_dir)
     
-    # Ejecutar chequeo diario
     success = monitor.run_daily_check(
         recipient_email=config['recipient_email'],
         smtp_config=config['smtp_config']
