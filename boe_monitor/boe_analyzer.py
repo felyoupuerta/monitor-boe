@@ -459,7 +459,14 @@ class BOEMonitor:
             msg['Subject'] = f"📋 Estado de {country_name} - {datetime.now().strftime('%d/%m/%Y')}"
             
         msg['From'] = smtp_config['username']
-        msg['To'] = recipient_email
+        if isinstance(recipient_email, list):
+            recipients_str = ", ".join(recipient_email)
+        else:
+            recipients_str = recipient_email
+            # Convert single string to list for potential iteration uses if needed, 
+            # though here we only need string for header
+            
+        msg['To'] = recipients_str
         
         html_content = self.create_email_html(items, has_changes)
         
@@ -472,7 +479,7 @@ class BOEMonitor:
                 server.login(smtp_config['username'], smtp_config['password'])
                 server.send_message(msg)
             
-            print(f"✅ Notificación enviada a {recipient_email}")
+            print(f"✅ Notificación enviada a {recipients_str}")
             return True
         except Exception as e:
             print(f"❌ Error al enviar correo: {e}")

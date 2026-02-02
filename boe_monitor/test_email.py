@@ -25,13 +25,19 @@ def test_email_config():
     recipient = config['recipient_email']
     smtp_config = config['smtp_config']
     
+    # Manejar lista de destinatarios
+    if isinstance(recipient, list):
+        recipient_str = ", ".join(recipient)
+    else:
+        recipient_str = recipient
+    
     print("=" * 60)
     print("  📧 Prueba de Configuración de Correo Electrónico")
     print("=" * 60)
     print()
     print(f"Servidor SMTP: {smtp_config['server']}:{smtp_config['port']}")
     print(f"Usuario: {smtp_config['username']}")
-    print(f"Destinatario: {recipient}")
+    print(f"Destinatario: {recipient_str}")
     print()
     print("Intentando enviar correo de prueba...")
     print()
@@ -39,7 +45,7 @@ def test_email_config():
     msg = MIMEMultipart('alternative')
     msg['Subject'] = "✅ Prueba de BOE Monitor - Configuración Correcta"
     msg['From'] = smtp_config['username']
-    msg['To'] = recipient
+    msg['To'] = recipient_str
     
     html_content = """
     <html>
