@@ -22,4 +22,5 @@ boe_monitor/
 │   └── +++
 └── logs/                   # Logs de ejecución
 
-
+comando para pasar archivos de windows a UNIX(problemas con los espacios en blanco)
+dos2unix <nombre del archivo>
