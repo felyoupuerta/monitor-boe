@@ -76,7 +76,7 @@ def test_email_config():
             <ul>
                 <li><strong>Servidor SMTP:</strong> """ + smtp_config['server'] + """</li>
                 <li><strong>Usuario:</strong> """ + smtp_config['username'] + """</li>
-                <li><strong>Destinatario:</strong> """ + recipient + """</li>
+                <li><strong>Destinatario:</strong> """ + recipient_str + """</li>
             </ul>
             
             <p class="success">¡Todo listo para monitorear el BOE!</p>
@@ -110,7 +110,7 @@ def test_email_config():
         print("✅ ¡ÉXITO! El correo de prueba se envió correctamente")
         print("=" * 60)
         print()
-        print(f"Revisa tu bandeja de entrada en: {recipient}")
+        print(f"Revisa tu bandeja de entrada en: {recipient_str}")
         print()
         print("Si no lo ves, revisa la carpeta de spam.")
         print()
