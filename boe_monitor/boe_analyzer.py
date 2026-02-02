@@ -15,6 +15,7 @@ from email.mime.multipart import MIMEMultipart
 from bs4 import BeautifulSoup
 import hashlib
 from db_manager import DatabaseManager
+import unicodedata
 
 class BOEMonitor:
     def __init__(self, db_config, source_config, data_dir="./boe_data"):
@@ -419,12 +420,23 @@ class BOEMonitor:
         """
         Compara dos listas de items y detecta cambios
         """
-        today_titles = {item.get('titulo', '') for item in today_items}
-        yesterday_titles = {item.get('titulo', '') for item in yesterday_items}
-        
-        new_items = [item for item in today_items if item.get('titulo', '') not in yesterday_titles]
-        
-        removed_items = [item for item in yesterday_items if item.get('titulo', '') not in today_titles]
+        def _normalize_title(t):
+            if not t:
+                return ''
+            try:
+                # Normalizar unicode, colapsar espacios y pasar a minúsculas
+                s = unicodedata.normalize('NFKC', str(t))
+                s = ' '.join(s.split())
+                return s.strip().lower()
+            except Exception:
+                return str(t).strip().lower()
+
+        today_titles = {_normalize_title(item.get('titulo', '')) for item in today_items}
+        yesterday_titles = {_normalize_title(item.get('titulo', '')) for item in yesterday_items}
+
+        new_items = [item for item in today_items if _normalize_title(item.get('titulo', '')) not in yesterday_titles]
+
+        removed_items = [item for item in yesterday_items if _normalize_title(item.get('titulo', '')) not in today_titles]
         
         return {
             'new_items': new_items,
@@ -563,7 +575,17 @@ class BOEMonitor:
         yesterday = today - timedelta(days=1)
         yesterday_items = self.load_day_data(yesterday.date())
         print(f"📚 Items del día anterior en BD: {len(yesterday_items)}")
-        
+
+        # Si no hay datos del día anterior, usar las publicaciones ya guardadas del día de hoy
+        used_baseline = 'yesterday'
+        if not yesterday_items:
+            today_saved = self.load_day_data(today.date())
+            if today_saved:
+                yesterday_items = today_saved
+                used_baseline = 'today_saved'
+
+        print(f"📚 Usando baseline para comparación: {used_baseline} (items={len(yesterday_items)})")
+
         # Comparar items
         comparison = self.compare_items(today_items, yesterday_items)
         new_items = comparison['new_items']
@@ -574,21 +596,24 @@ class BOEMonitor:
         print(f"   ➖ Eliminados: {len(removed_items)}")
         
         # Guardar TODOS los items de hoy en la BD (para comparación futura)
-        saved_count = 0
+        saved_items = []
         for item in today_items:
             if self.db.save_publication(item, today.date()):
-                saved_count += 1
-        
-        print(f"💾 Guardados en BD: {saved_count} items nuevos")
-        
-        status = "success" if new_items else "no_changes"
-        self.db.log_execution(status, len(today_items), len(new_items), len(removed_items), "Check completed")
+                saved_items.append(item)
 
-        if new_items:
-            print(f"📊 Novedades detectadas: {len(new_items)} items. Enviando correo...")
-            self.send_email_notification(new_items, recipient_email, smtp_config, has_changes=True)
+        print(f"💾 Guardados en BD: {len(saved_items)} items nuevos")
+
+        # Registrar ejecución: new_items refleja diferencia respecto al baseline usado,
+        # pero consideramos "success" sólo si realmente se guardaron nuevos items en la BD.
+        status = "success" if saved_items else "no_changes"
+        self.db.log_execution(status, len(today_items), len(saved_items), len(removed_items), "Check completed")
+
+        # Enviar correo: si no se guardaron items nuevos, enviar mensaje de 'Sin novedades'.
+        if saved_items:
+            print(f"📊 Novedades detectadas: {len(saved_items)} items. Enviando correo...")
+            self.send_email_notification(saved_items, recipient_email, smtp_config, has_changes=True)
         else:
-            print("ℹ️ Sin cambios respecto al día anterior. Enviando confirmación...")
+            print("ℹ️ Sin novedades (no se guardaron items nuevos). Enviando confirmación...")
             self.send_email_notification([], recipient_email, smtp_config, has_changes=False)
         
         return True

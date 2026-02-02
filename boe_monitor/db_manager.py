@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 import mysql.connector
-from datetime import datetime
+from datetime import datetime, date as _date
 import json
 from pathlib import Path
 
@@ -99,10 +100,20 @@ class DatabaseManager:
             if not self.cursor:
                  if not self.connect():
                      return False
-            
+            # Normalize date param to a date object or ISO string
+            if isinstance(date_obj, _date):
+                date_param = date_obj
+            elif isinstance(date_obj, datetime):
+                date_param = date_obj.date()
+            else:
+                date_param = date_obj
+
+            title = item.get('titulo', '')
+
             check_sql = f"SELECT id FROM {self.table_publications} WHERE boe_date = %s AND title = %s LIMIT 1"
-            self.cursor.execute(check_sql, (date_obj, item.get('titulo', '')))
-            if self.cursor.fetchone():
+            self.cursor.execute(check_sql, (date_param, title))
+            found = self.cursor.fetchone()
+            if found:
                 return False
 
             sql = f"""
@@ -111,15 +122,19 @@ class DatabaseManager:
                 VALUES (%s, %s, %s, %s, %s, %s)
             """
             values = (
-                date_obj,
-                item.get('titulo', ''),
+                date_param,
+                title,
                 item.get('seccion', ''),
                 item.get('departamento', ''),
                 item.get('rango', ''),
                 item.get('url', '')
             )
-            self.cursor.execute(sql, values)
-            return True
+            try:
+                self.cursor.execute(sql, values)
+                return True
+            except Exception as e:
+                print(f"Error inserting publication: {e}")
+                return False
         except mysql.connector.Error as err:
             print(f"Error saving publication: {err}")
             return False
