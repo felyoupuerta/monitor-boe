@@ -4,21 +4,17 @@
     "felipe.angeriz.e@gmail.com",
     "slatumba@gmail.com"
   ],
-
   "smtp_config": {
     "server": "smtp.gmail.com",
     "port": 587,
     "username": "felipe.angeriz.e@gmail.com",
     "password": "rtyr opyl zege ezuj"
   },
-
   "data_dir": "./boe_data",
-
   "notifications": {
     "send_if_no_changes": false,
     "max_items_in_email": 20
   },
-
   "db_config": {
     "host": "localhost",
     "user": "boe_monitor",
@@ -26,12 +22,37 @@
     "database": "boe_monitor",
     "port": 3306
   },
-
   "sources": {
     "es": {
       "name": "España",
       "api_url_template": "https://www.boe.es/datosabiertos/api/boe/sumario/{date}",
-      "parser": "boe_xml",
+      "fetch_method": "requests",
+      "parser_rules": {
+        "engine": "xml",
+        "container": "item",
+        "fields": {
+          "titulo": {
+            "selector": "titulo",
+            "type": "text"
+          },
+          "url": {
+            "selector": "urlPdf",
+            "type": "text"
+          },
+          "seccion": {
+            "selector": "seccion",
+            "type": "text"
+          },
+          "departamento": {
+            "selector": "departamento",
+            "type": "text"
+          },
+          "rango": {
+            "selector": "rango",
+            "type": "text"
+          }
+        }
+      },
       "headers": {
         "Accept": "application/xml"
       }
@@ -39,14 +60,68 @@
     "fr": {
       "name": "Francia",
       "url": "https://www.legifrance.gouv.fr",
-      "api_url_template": "https://www.legifrance.gouv.fr/jorf/jo",
-      "parser": "fr_legifrance_api",
+      "api_url_template": "https://www.legifrance.gouv.fr/search/jorf?tab_selection=jorf&searchField=ALL&searchType=ALL&typePagination=DEFAUT&sortValue=SIGNATURE_DATE_DESC&pageSize=25&page=1&datePublication={day:02d}%2F{month:02d}%2F{year}",
+      "fetch_method": "selenium",
+      "delay": 10,
+      "parser_rules": {
+        "engine": "html.parser",
+        "container": ".notice, .result, article",
+        "fields": {
+          "titulo": {
+            "selector": "h3, h2",
+            "type": "text"
+          },
+          "url": {
+            "selector": "h3 a, h2 a",
+            "type": "attr",
+            "attr": "href"
+          },
+          "seccion": {
+            "selector": "span[class*='section']",
+            "type": "text",
+            "default": "JORF"
+          },
+          "departamento": {
+            "selector": "span[class*='type']",
+            "type": "text",
+            "default": "Texte"
+          }
+        }
+      },
       "headers": {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "fr-FR,fr;q=0.9",
-        "Referer": "https://www.legifrance.gouv.fr/",
-        "Connection": "keep-alive"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    },
+    "cz": {
+      "name": "República Checa",
+      "country_code": "cz",
+      "url": "https://www.e-sbirka.cz",
+      "api_url_template": "https://www.e-sbirka.cz/vyhledavani?vyhlaseno_od={date_dmy_dot}&vyhlaseno_do={date_dmy_dot}",
+      "fetch_method": "selenium",
+      "parser_rules": {
+        "engine": "html.parser",
+        "container": "tr.pravni-akt-row",
+        "fields": {
+          "titulo": {
+            "selector": "td.cell-nazev a",
+            "type": "text"
+          },
+          "url": {
+            "selector": "td.cell-nazev a",
+            "type": "attr",
+            "attr": "href"
+          },
+          "rango": {
+            "selector": "td.cell-cislo",
+            "type": "text"
+          },
+          "seccion": {
+            "default": "Sbírka zákonů"
+          },
+          "departamento": {
+            "default": "Nová legislativa"
+          }
+        }
       }
     }
   }

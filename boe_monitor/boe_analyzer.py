@@ -40,363 +40,171 @@ class BOEMonitor:
 
     def get_boe_summary(self, date=None, retry_count=0, max_retries=3):
         """
-        Obtiene el sumario del BOE (o equivalente) para una fecha específica
-        date: datetime object o None para hoy
-        retry_count: contador interno de reintentos
+        Obtiene el sumario de la fuente configurada.
         """
         if date is None:
             date = datetime.now()
         
-        # Formatos fecha flexibles
-        date_ymd = date.strftime("%Y%m%d")
-        date_dmy = date.strftime("%d/%m/%Y")
-        date_dmy_encoded = date_dmy.replace("/", "%2F") # DD%2FMM%2FYYYY
+        # Diccionario de fechas para el template string
+        date_formats = {
+            "date_ymd": date.strftime("%Y%m%d"),
+            "date": date.strftime("%Y%m%d"), # Alias común
+            "date_dmy": date.strftime("%d/%m/%Y"),
+            "date_dmy_encoded": date.strftime("%d/%m/%Y").replace("/", "%2F"),
+            "date_dmy_dot": date.strftime("%d.%m.%Y"),
+            "date_iso": date.strftime("%Y-%m-%d"),
+            "day": date.day,
+            "month": date.month,
+            "year": date.year
+        }
         
-        # ARMAR URL
+        # Construir URL
         url_template = self.source_config.get('api_url_template')
-        if url_template:
-            #placeholders
-            url = url_template.format(
-                date=date_ymd,
-                date_ymd=date_ymd,
-                date_dmy=date_dmy,
-                date_dmy_encoded=date_dmy_encoded
-            )
+        if not url_template:
+            # Fallback legacy para BOE España si no está definido
+            url = f"{self.base_url}/datosabiertos/api/boe/sumario/{date_formats['date_ymd']}"
         else:
-            
-            url = f"{self.base_url}/datosabiertos/api/boe/sumario/{date_ymd}"
+            try:
+                url = url_template.format(**date_formats)
+            except KeyError as e:
+                print(f"Error en template de URL: Falta el placeholder {e}")
+                return None
         
-        headers = self.source_config.get('headers', {'Accept': 'application/xml'})
+        headers = self.source_config.get('headers', {})
+        fetch_method = self.source_config.get('fetch_method', 'requests')
+        
+        print(f"🌍 Consultando ({self.country_code.upper()}) via {fetch_method}: {url}")
         
         try:
-            print(f"🌍 Consultando URL ({self.country_code}): {url}")
+            content = None
             
-            #delays Francia evitar bloqueos y casque del programa, 403.
-            if self.country_code == 'fr' and retry_count > 0:
-                delay = 3 + (retry_count * 2) 
-                print(f"⏳ Esperando {delay}s antes de reintentar...")
-                time.sleep(delay)
-            
-            #Francia usao Selenium para usar una navegador real y que no detecte que es un BOT y bloquee el programa.
-            if self.country_code == 'fr':
-                print("   Usando Selenium para acceso directo...")
-                html_content = self._try_selenium_scrape(url)
-                if html_content:
-                    return {
-                        'date': date_ymd,
-                        'content': html_content,
-                        'hash': hashlib.md5(html_content.encode()).hexdigest(),
-                        'date_obj': date
-                    }
-                else:
-                    print("Selenium no pudo obtener datos")
+            # Método 1: Selenium
+            if fetch_method == 'selenium':
+                 try:
+                    from selenium import webdriver
+                    from selenium.webdriver.chrome.options import Options
+                    
+                    options = Options()
+                    options.add_argument('--headless')
+                    options.add_argument('--no-sandbox')
+                    options.add_argument('--disable-dev-shm-usage')
+                    if 'User-Agent' in headers:
+                        options.add_argument(f'user-agent={headers["User-Agent"]}')
+                    
+                    driver = webdriver.Chrome(options=options)
+                    driver.get(url)
+                    time.sleep(self.source_config.get('delay', 3)) # Delay configurable
+                    
+                    content = driver.page_source
+                    driver.quit()
+                 except ImportError:
+                    print("Selenium no instalado. Instala: pip install selenium")
                     return None
+                 except Exception as e:
+                    print(f"Error Selenium: {e}")
+                    return None
+            
+            # Método 2: Requests (default)
             else:
                 response = self.session.get(url, headers=headers, timeout=30)
-            
-            # Si da error 403, reintentar
-            if response and response.status_code == 403:
-                print(f"Error 403 Forbidden. Reintentando ({retry_count + 1}/{max_retries})...")
-                if retry_count < max_retries:
-                    return self.get_boe_summary(date, retry_count + 1, max_retries)
-                else:
-                    print(f"Se agotaron los reintentos para {date_ymd}")
+                if response.status_code == 200:
+                    content = response.text
+                elif response.status_code == 403:
+                     # Reintento simple
+                     time.sleep(2)
+                     response = self.session.get(url, headers=headers, timeout=30)
+                     if response.status_code == 200:
+                         content = response.text
+                
+                if not content:
+                    print(f"Error HTTP {response.status_code}")
                     return None
 
-            if response:
-                try:
-                    response.raise_for_status()
-                except:
-                    if response.status_code == 403 and retry_count < max_retries:
-                        return self.get_boe_summary(date, retry_count + 1, max_retries)
-                    return None
-                
-                return {
-                    'date': date_ymd,
-                    'content': response.text,
-                    'hash': hashlib.md5(response.text.encode()).hexdigest(),
+            if content:
+                 return {
+                    'date': date_formats['date_ymd'],
+                    'content': content,
+                    'hash': hashlib.md5(content.encode('utf-8')).hexdigest(),
                     'date_obj': date
                 }
-            else:
-                return None
-                
-        except requests.exceptions.RequestException as e:
-            print(f"Error al obtener datos para {date_ymd}: {e}")
-            if retry_count < max_retries and '403' not in str(e):
-                return self.get_boe_summary(date, retry_count + 1, max_retries)
             return None
-    
-    def _get_response_with_bypass(self, url, headers):
-        """
-        Intenta obtener respuesta con múltiples estrategias para evitar bloqueos
-        """
-        strategies = [
-            {'headers': headers},
-            {'headers': {**headers, 'Accept': 'application/json'}},
-            {'headers': {**headers, 'X-Requested-With': 'XMLHttpRequest'}},
-            {'headers': {**headers, 'Accept': 'text/html'}},
-        ]
-        
-        for i, strategy in enumerate(strategies):
-            try:
-                print(f"   Intento {i+1}: Headers alternativos...")
-                response = self.session.get(url, timeout=10, **strategy)
-                print(f"   Status: {response.status_code}")
-                if response.status_code == 200:
-                    return response
-                elif response.status_code == 403:
-                    time.sleep(2)
-                    continue
-            except Exception as e:
-                print(f"   Error en intento {i+1}: {e}")
-                continue
-        
-        # Último intento sin custom headers
-        try:
-            print("   Intento final: Sin headers custom...")
-            response = self.session.get(url, timeout=10)
-            return response
-        except Exception as e:
-            print(f"   Error final: {e}")
-            return None
-    
-    def _try_selenium_scrape(self, url):
-        """
-        
-         Intentar con Selenium para contenido de Francia (chromedriver)
-        
-        """
-        try:
-            from selenium import webdriver
-            from selenium.webdriver.common.by import By
-            from selenium.webdriver.support.ui import WebDriverWait
-            from selenium.webdriver.support import expected_conditions as EC
-            
-            print("   Intentando con Selenium (navegador real)...")
-            options = webdriver.ChromeOptions()
-            options.add_argument('--headless')
-            options.add_argument('--no-sandbox')
-            options.add_argument('--disable-dev-shm-usage')
-            options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
-            
-            driver = webdriver.Chrome(options=options)
-            driver.get(url)
-            
-            # EsperO la carga deL contenido
-            time.sleep(3)
-            html = driver.page_source
-            driver.quit()
-            
-            return html if html and len(html) > 500 else None
-        except ImportError:
-            print("Selenium no instalado. Instala con: pip install selenium")
-            return None
-        except Exception as e:
-            print(f"Error con Selenium: {e}")
-            return None
-    
-    def parse_boe_content(self, xml_content):
-        """
-        
-        parsear xml o html y extraer items relevantes
 
+        except Exception as e:
+            print(f"Error general obteniendo datos: {e}")
+            return None
 
+    def parse_boe_content(self, content):
         """
-        parser_type = self.source_config.get('parser', 'boe_xml')
-        
-        items = []
-        
-        # Parser(BOE España)
-        if parser_type == 'boe_xml':
-            try:
-                soup = BeautifulSoup(xml_content, 'xml')
-                for item in soup.find_all('item'):
-                    try:
-                        items.append({
-                            'titulo': item.find('titulo').text if item.find('titulo') else '',
-                            'seccion': item.find('seccion').text if item.find('seccion') else '',
-                            'departamento': item.find('departamento').text if item.find('departamento') else '',
-                            'rango': item.find('rango').text if item.find('rango') else '',
-                            'url': item.find('urlPdf').text if item.find('urlPdf') else '',
-                        })
-                    except Exception:
-                        continue
-            except Exception as e:
-                print(f"Error parseando XML: {e}")
-                
-        # Parser Legifrance
-        elif parser_type == 'fr_jo_demo':
-            try:
-                soup = BeautifulSoup(xml_content, 'html.parser')
-                # Buscar artículos en Legifrance
-                articles = soup.find_all('article', class_='notice')
-                
-                if not articles:
-                    articles = soup.find_all('div', class_=lambda x: x and 'notice' in x)
-                
-                for article in articles:
-                    try:
-                        #título
-                        title_elem = article.find('h3') or article.find('h2') or article.find('a')
-                        titulo = title_elem.get_text(strip=True) if title_elem else ''
-                        
-                        #URL
-                        url_elem = article.find('a', href=True)
-                        url = url_elem['href'] if url_elem else ''
-                        if url and not url.startswith('http'):
-                            url = 'https://www.legifrance.gouv.fr' + url
-                        
-                        #Extraer sección/tipo norma
-                        section_elem = article.find('span', class_=lambda x: x and 'section' in x.lower())
-                        seccion = section_elem.get_text(strip=True) if section_elem else 'JORF'
-                        
-                        #departamento/tipo norma
-                        dept_elem = article.find('span', class_=lambda x: x and 'type' in x.lower())
-                        departamento = dept_elem.get_text(strip=True) if dept_elem else 'Loi ou Décret'
-                        
-                        if titulo:  #agregar si hay título
-                            items.append({
-                                'titulo': titulo,
-                                'seccion': seccion,
-                                'departamento': departamento,
-                                'rango': 'Legifrance',
-                                'url': url,
-                            })
-                    except Exception as e:
-                        print(f"Error parseando artículo francés: {e}")
-                        continue
-                
-                if not items:
-                    print("No se encontraron artículos en la respuesta de Legifrance")
-                    
-            except Exception as e:
-                print(f"Error parseando HTML francés: {e}")
-        
-        # Parser FRANCIA - API Legifrance JSON
-        elif parser_type == 'fr_legifrance_api':
-            try:
-                #intento parsear JSON
-                try:
-                    data = json.loads(xml_content)
-                    results = data.get('results', [])
-                except (json.JSONDecodeError, ValueError):
-                    # Si no es JSON, es HTML
-                    results = []
-                
-                # Si no hay en JSON, parsear como HTML
-                if not results:
-                    print("   Parseando como HTML...")
-                    items = self._parse_legifrance_html_fallback(xml_content)
-                    if items:
-                        return items
-                
-                # Procesar  JSON
-                for item in results:
-                    try:
-                        titulo = item.get('title') or item.get('titrage', '')
-                        url = item.get('url', '')
-                        
-                        if url and not url.startswith('http'):
-                            url = 'https://www.legifrance.gouv.fr' + url
-                        
-                        seccion = item.get('nature', 'JORF')
-                        if isinstance(seccion, dict):
-                            seccion = seccion.get('label', 'JORF')
-                        
-                        departamento = item.get('text_type') or item.get('type_acte', 'Texte')
-                        
-                        if titulo:
-                            items.append({
-                                'titulo': str(titulo)[:500],
-                                'seccion': str(seccion)[:255],
-                                'departamento': str(departamento)[:255],
-                                'rango': item.get('rank', 'Legifrance')[:255],
-                                'url': url,
-                            })
-                    except Exception as e:
-                        continue
-                
-                if items:
-                    print(f"Parseados {len(items)} items")
-                else:
-                    print("Sin items encontrados")
-                    
-            except Exception as e:
-                print(f"Error parseando: {e}")
-                items = self._parse_legifrance_html_fallback(xml_content)
-        
-        return items
-    
-    def _parse_legifrance_html_fallback(self, html_content):
+        Parser genérico basado en reglas del config.json
+        """
+        rules = self.source_config.get('parser_rules')
+        if not rules:
+            print("No se encontraron reglas de parsers en config.json")
+            return []
+            
         items = []
         try:
-            soup = BeautifulSoup(html_content, 'html.parser')           
-            containers = soup.find_all(['article', 'div', 'li'], class_=lambda x: x and any(c in str(x).lower() for c in ['notice', 'result', 'item', 'publication']))
-        
-            if not containers:
-                
-                containers = soup.find_all('a', href=lambda x: x and 'jorf' in x.lower())
+            engine = rules.get('engine', 'html.parser')
+            # Fix para lxml vs html.parser si es xml
+            if engine == 'xml' and 'xml' not in content[:50].lower():
+                 # A veces se define xml pero llega html, manejo básico
+                 pass
+
+            soup = BeautifulSoup(content, engine)
             
-            if not containers:
-                
-                containers = soup.find_all(['tr', 'div'], class_=lambda x: x and 'row' in str(x).lower())
+            container_selector = rules.get('container')
+            if not container_selector:
+                return []
             
-            print(f"   Encontrados {len(containers)} contenedores potenciales")
+            # Seleccionar contenedores (items)
+            containers = soup.select(container_selector)
+            print(f"   Encontrados {len(containers)} elementos.")
             
-            for container in containers[:100]:
+            fields = rules.get('fields', {})
+            
+            for container in containers:
+                item = {}
                 try:
-                    title_elem = container.find(['h2', 'h3', 'h4', 'a', 'strong', 'span'])
-                    if not title_elem:
-                        title_elem = container
+                    for field_name, field_rule in fields.items():
+                        value = field_rule.get('default', '')
+                        
+                        selector = field_rule.get('selector')
+                        if selector:
+                            # Buscar elemento
+                            element = container.select_one(selector)
+                            if element:
+                                extract_type = field_rule.get('type', 'text')
+                                if extract_type == 'text':
+                                    value = element.get_text(" ", strip=True)
+                                elif extract_type == 'attr':
+                                    attr_name = field_rule.get('attr')
+                                    value = element.get(attr_name, '')
+                        
+                        # Post-procesado especifico para URL relative
+                        if field_name == 'url' and value and not value.startswith('http'):
+                            base_url = self.source_config.get('url', '')
+                            # Limpieza de slash duplicado
+                            if base_url.endswith('/') and value.startswith('/'):
+                                value = base_url + value[1:]
+                            elif not base_url.endswith('/') and not value.startswith('/'):
+                                value = base_url + '/' + value
+                            else:
+                                value = base_url + value
+                                
+                        item[field_name] = value
                     
-                    titulo = title_elem.get_text(strip=True) if title_elem else ''
-                    
-                    
-                    titulo = ' '.join(titulo.split())[:500]
-                    
-                    if not titulo or len(titulo) < 5:
-                        continue
-                    
-                    
-                    link_elem = container.find('a', href=True)
-                    if not link_elem:
-                        link_elem = container.find('a')
-                    
-                    url = ''
-                    if link_elem and link_elem.get('href'):
-                        url = link_elem['href']
-                        if url and not url.startswith('http'):
-                            url = 'https://www.legifrance.gouv.fr' + url
-                    
-                   
-                    seccion = 'JORF'
-                    departamento = 'Texte'
-                    
-                  
-                    text_content = container.get_text()
-                    if 'décret' in text_content.lower():
-                        departamento = 'Décret'
-                    elif 'loi' in text_content.lower():
-                        departamento = 'Loi'
-                    elif 'arrêté' in text_content.lower():
-                        departamento = 'Arrêté'
-                    
-                    if titulo:
-                        items.append({
-                            'titulo': titulo,
-                            'seccion': seccion,
-                            'departamento': departamento,
-                            'rango': 'Legifrance',
-                            'url': url,
-                        })
+                    # Validar integridad mínima:
+                    if item.get('titulo'):
+                        items.append(item)
+                        
                 except Exception as e:
                     continue
-            
-            print(f"Extraídos {len(items)} items del HTML")
-            return items
+                    
         except Exception as e:
-            print(f"Error en fallback HTML: {e}")
-            return []
+            print(f"Error en parser genérico: {e}")
+        
+        return items
+
     
     def save_day_data(self, items, date_obj):
 
