@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Script de prueba para verificar la configuración del correo electrónico
-"""
-
 import json
 import sys
 import smtplib
@@ -11,11 +7,9 @@ from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 
 def test_email_config():
-    """Prueba la configuración del correo"""
-    
     config_path = Path('config.json')
     if not config_path.exists():
-        print("❌ Error: No se encuentra config.json")
+        print("Error: No se encuentra config.json")
         print("   Crea el archivo a partir de config.example.json")
         return False
     
@@ -24,15 +18,13 @@ def test_email_config():
     
     recipient = config['recipient_email']
     smtp_config = config['smtp_config']
-    
-    # Manejar lista de destinatarios
     if isinstance(recipient, list):
         recipient_str = ", ".join(recipient)
     else:
         recipient_str = recipient
     
     print("=" * 60)
-    print("  📧 Prueba de Configuración de Correo Electrónico")
+    print("Prueba de Configuración de Correo Electrónico")
     print("=" * 60)
     print()
     print(f"Servidor SMTP: {smtp_config['server']}:{smtp_config['port']}")
@@ -43,7 +35,7 @@ def test_email_config():
     print()
     
     msg = MIMEMultipart('alternative')
-    msg['Subject'] = "✅ Prueba de BOE Monitor - Configuración Correcta"
+    msg['Subject'] = "Prueba de BOE Monitor - Configuración Correcta"
     msg['From'] = smtp_config['username']
     msg['To'] = recipient_str
     
@@ -59,7 +51,7 @@ def test_email_config():
     </head>
     <body>
         <div class="header">
-            <h1>✅ ¡Configuración Exitosa!</h1>
+            <h1>¡Configuración Exitosa!</h1>
         </div>
         <div class="content">
             <h2>Tu BOE Monitor está correctamente configurado</h2>
@@ -96,18 +88,18 @@ def test_email_config():
     try:
         print("🔌 Conectando al servidor SMTP...")
         with smtplib.SMTP(smtp_config['server'], smtp_config['port'], timeout=10) as server:
-            print("🔐 Iniciando conexión segura (TLS)...")
+            print("Iniciando conexión segura (TLS)...")
             server.starttls()
             
-            print("👤 Autenticando usuario...")
+            print("Autenticando usuario...")
             server.login(smtp_config['username'], smtp_config['password'])
             
-            print("📤 Enviando correo de prueba...")
+            print("Enviando correo de prueba...")
             server.send_message(msg)
         
         print()
         print("=" * 60)
-        print("✅ ¡ÉXITO! El correo de prueba se envió correctamente")
+        print("¡ÉXITO! El correo de prueba se envió correctamente")
         print("=" * 60)
         print()
         print(f"Revisa tu bandeja de entrada en: {recipient_str}")
@@ -122,7 +114,7 @@ def test_email_config():
     except smtplib.SMTPAuthenticationError:
         print()
         print("=" * 60)
-        print("❌ ERROR DE AUTENTICACIÓN")
+        print("ERROR DE AUTENTICACIÓN")
         print("=" * 60)
         print()
         print("Las credenciales son incorrectas. Verifica:")
@@ -141,7 +133,7 @@ def test_email_config():
     except smtplib.SMTPException as e:
         print()
         print("=" * 60)
-        print("❌ ERROR DE SMTP")
+        print("ERROR DE SMTP")
         print("=" * 60)
         print(f"Error: {e}")
         print()
@@ -155,7 +147,7 @@ def test_email_config():
     except Exception as e:
         print()
         print("=" * 60)
-        print("❌ ERROR INESPERADO")
+        print("ERROR INESPERADO")
         print("=" * 60)
         print(f"Error: {e}")
         print()

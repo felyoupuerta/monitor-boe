@@ -1,7 +1,5 @@
 ### BOE
 ### FELIPE ANGERIZ 
-
-
 ### DEPENDENCIAS 
 pip install -r requirements.txt
 
@@ -40,8 +38,6 @@ PARA EL CRONTAB LOS MOBIMOS COMO UN BINARIO:
 ARCHIVO EN CRONTAB DE ROOT(SE EJECUTA TODOS LOS DÍAS A LAS 8 DE LA MAÑANA):
             0 8 * * * /usr/bin/monesp
             0 8 * * * /usr/bin/monfr
-
-
 
 
 EXTRA POR SI SE TRABAJA COMO YO EN WINDOWS Y UNIX(POR LAS DUDAS):

@@ -15,12 +15,12 @@ echo "Ejecutando comandos SQL..."
 sudo mariadb -e "$SQL_COMMANDS"
 
 if [ $? -eq 0 ]; then
-    echo "✅ Configuración completada con éxito."
+    echo "Configuración completada con éxito."
     echo "   - BD: boe_monitor"
     echo "   - Usuario: boe_monitor"
     echo "   - Password: secure_boe_password"
 else
-    echo "❌ Falló la configuración automática."
+    echo "Falló la configuración automática."
     echo "   Por favor, ejecuta manualmente:"
     echo "   mariadb -u root -p -e \"$SQL_COMMANDS\""
 fi

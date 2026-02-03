@@ -29,11 +29,11 @@ class DatabaseManager:
         except mysql.connector.Error as err:
             if err.errno == 1049:  # Unknown database
                 return self.create_database()
-            print(f"❌ Error de conexión a BD: {err}")
+            print(f"Error de conexión a BD: {err}")
             return False
 
     def create_database(self):
-        """Creates the database if it doesn't exist"""
+        
         try:
             temp_conn = mysql.connector.connect(
                 host=self.config.get('host', 'localhost'),
@@ -44,15 +44,15 @@ class DatabaseManager:
             cursor = temp_conn.cursor()
             db_name = self.config.get('database', 'boe_monitor')
             cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
-            print(f"✅ Base de datos '{db_name}' creada.")
+            print(f"Base de datos '{db_name}' creada.")
             temp_conn.close()
             return self.connect()
         except mysql.connector.Error as err:
-            print(f"❌ Error al crear BD: {err}")
+            print(f"Error al crear BD: {err}")
             return False
 
     def init_tables(self):
-        """Initialize database tables for the specific country"""
+        
         if not self.conn:
             if not self.connect():
                 return False
@@ -85,10 +85,10 @@ class DatabaseManager:
                 )
             """)
             
-            print(f"✅ Tablas inicializadas para '{self.country_code}'.")
+            print(f"Tablas inicializadas para '{self.country_code}'.")
             return True
         except mysql.connector.Error as err:
-            print(f"❌ Error al crear tablas: {err}")
+            print(f"Error al crear tablas: {err}")
             return False
 
     def save_publication(self, item, date_obj):
@@ -100,7 +100,7 @@ class DatabaseManager:
             if not self.cursor:
                  if not self.connect():
                      return False
-            # Normalize date param to a date object or ISO string
+           
             if isinstance(date_obj, _date):
                 date_param = date_obj
             elif isinstance(date_obj, datetime):
@@ -140,7 +140,7 @@ class DatabaseManager:
             return False
 
     def get_publications_by_date(self, date_obj):
-        """Get all publications for a specific date"""
+        """Obtener publicaciones de una fecha específica"""
         if not self.conn:
             self.connect()
             
@@ -163,7 +163,7 @@ class DatabaseManager:
             return []
 
     def log_execution(self, status, items_found, new_items, removed_items, message=""):
-        """Log execution stats"""
+        """LOG de estadisticas de ejecución"""
         if not self.conn:
             self.connect()
             

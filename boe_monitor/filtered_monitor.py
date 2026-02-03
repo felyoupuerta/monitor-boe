@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-Extensión del BOE Monitor con filtrado por palabras clave
-Útil si solo te interesan ciertos temas específicos
-"""
-
 from boe_analyzer import BOEMonitor
 import json
 
@@ -13,11 +8,8 @@ class FilteredBOEMonitor(BOEMonitor):
         self.keywords = [k.lower() for k in (keywords or [])]
     
     def filter_items_by_keywords(self, items):
-        """
-        Filtra publicaciones palabras clave
-        """
         if not self.keywords:
-            return items  # Si no hay keywords, devolver todo
+            return items
         
         filtered = []
         for item in items:
@@ -54,7 +46,7 @@ class FilteredBOEMonitor(BOEMonitor):
         if changes.get('filtered'):
             filter_info = f"""
             <div style="background-color: #fff3cd; padding: 15px; margin: 20px 0; border-left: 4px solid #ffc107; border-radius: 4px;">
-                <h3>🔍 Filtros activos</h3>
+                <h3> Filtros activos</h3>
                 <p>Solo se muestran publicaciones que contengan estas palabras clave:</p>
                 <p><strong>{', '.join(changes['keywords'])}</strong></p>
             </div>
@@ -64,12 +56,12 @@ class FilteredBOEMonitor(BOEMonitor):
         return html
 
 
-# Ejemplo de uso con filtros
+
 if __name__ == "__main__":
     import sys
     from pathlib import Path
     
-    # Cargar configuración
+    
     config_path = Path('config.json')
     if not config_path.exists():
         print("❌ Error: No se encuentra config.json")
@@ -78,8 +70,7 @@ if __name__ == "__main__":
     with open(config_path, 'r') as f:
         config = json.load(f)
     
-    # CONFIGURACIÓN DE PALABRAS CLAVE
-    # Añade aquí las palabras o temas que te interesan
+    #CONFIG DE PALABRAS CLAVE
     keywords = [
         'inteligencia artificial',
         'tecnología',
@@ -89,9 +80,9 @@ if __name__ == "__main__":
     ]
     
     print("=" * 60)
-    print("  📋 BOE MONITOR FILTRADO")
+    print("BOE MONITOR FILTRADO")
     print("=" * 60)
-    print(f"\n🔍 Filtrando por palabras clave: {', '.join(keywords)}\n")
+    print(f"\nFiltrando por palabras clave: {', '.join(keywords)}\n")
     
     monitor = FilteredBOEMonitor(
         data_dir=config.get('data_dir', './boe_data'),
