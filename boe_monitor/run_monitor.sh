@@ -1,5 +1,5 @@
 #!/bin/bash
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+DIR="$( cd "RUTA DONDE ESTE EL PROYECTO ALOJADO EN EL SERVER" && pwd )"
 cd "$DIR"
 
 ARGS="$@"
