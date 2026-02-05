@@ -8,6 +8,7 @@ FELIPE ANGERIZ 29-01-2026
 """
 
 import requests
+import urllib3
 import json
 import os
 import time
@@ -20,6 +21,7 @@ from bs4 import BeautifulSoup
 import hashlib
 from db_manager import DatabaseManager
 import unicodedata
+import re
 
 class BOEMonitor:
     def __init__(self, db_config, source_config, data_dir="./boe_data"):
@@ -106,18 +108,89 @@ class BOEMonitor:
             
             # Método 2: Requests (default)
             else:
-                response = self.session.get(url, headers=headers, timeout=30)
-                if response.status_code == 200:
-                    content = response.text
-                elif response.status_code == 403:
-                     # Reintento simple
-                     time.sleep(2)
-                     response = self.session.get(url, headers=headers, timeout=30)
-                     if response.status_code == 200:
-                         content = response.text
+                verify_ssl = self.source_config.get('verify_ssl', True)
+                if not verify_ssl:
+                    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                
+                # Special Case for Kuwait (requests)
+                if self.country_code == 'kw':
+                    response = self.session.get(url, headers=headers, timeout=30, verify=verify_ssl)
+                    if response.status_code == 200:
+                        # Extract ID
+                        match = re.search(r"data\.EditionID_FK\s*=\s*'(\d+)'", response.text)
+                        if match:
+                            edition_id = match.group(1)
+                            print(f"   Kuwait Edition ID: {edition_id}")
+                            
+                            api_url = "https://kuwaitalyawm.media.gov.kw/online/AdsMainEditionJson"
+                            payload = {
+                                "draw": "1",
+                                "start": "0", # Fetch all (first page large enough)
+                                "length": "500",
+                                "EditionID_FK": edition_id,
+                                "AdsTitle": "", "Agents": "", "AdsCategories": "",
+                                "search[value]": "", "search[regex]": "false",
+                                "order[0][column]": "1", "order[0][dir]": "desc",
+                                # Required columns defs to avoid 500 error
+                                "columns[0][data]": "AdsTitle", "columns[0][name]": "", "columns[0][searchable]": "true", "columns[0][orderable]": "true", "columns[0][search][value]": "", "columns[0][search][regex]": "false",
+                                "columns[1][data]": "ID", "columns[1][name]": "", "columns[1][searchable]": "true", "columns[1][orderable]": "true", "columns[1][search][value]": "", "columns[1][search][regex]": "false",
+                                "columns[2][data]": "AgentTitle", "columns[2][name]": "", "columns[2][searchable]": "true", "columns[2][orderable]": "true", "columns[2][search][value]": "", "columns[2][search][regex]": "false",
+                                "columns[3][data]": "AdsCategoryTitle", "columns[3][name]": "", "columns[3][searchable]": "true", "columns[3][orderable]": "true", "columns[3][search][value]": "", "columns[3][search][regex]": "false"
+                            }
+                            
+                            headers_api = headers.copy()
+                            headers_api['X-Requested-With'] = 'XMLHttpRequest'
+                            
+                            api_resp = self.session.post(api_url, data=payload, headers=headers_api, verify=verify_ssl)
+                            if api_resp.status_code == 200:
+                                try:
+                                    json_data = api_resp.json()
+                                    items = json_data.get('data', [])
+                                    
+                                    html_parts = []
+                                    for item in items:
+                                        item_url = f"/flip?id={item.get('EditionID_FK')}&no={item.get('FromPage')}"
+                                        title = item.get('AdsTitle', 'No Title')
+                                        agent = item.get('AgentTitle', '')
+                                        cat = item.get('AdsCategoryTitle', '')
+                                        
+                                        html_parts.append(f'''
+                                        <div class="breifdiv">
+                                            <a data-load-url="{item_url}">{title}</a>
+                                            <span class="category">{cat}</span>
+                                            <span class="agent">{agent}</span>
+                                        </div>
+                                        ''')
+                                    content = "<html><body>" + "".join(html_parts) + "</body></html>"
+                                except ValueError:
+                                    print("Error parsing Kuwait API JSON")
+                                    content = None
+                            else:
+                                print(f"Error calling Kuwait API: {api_resp.status_code}")
+                                content = None
+                        else:
+                            print("Could not find EditionID_FK in Kuwait page")
+                            content = None
+                    else:
+                        print(f"Error fetching Kuwait main page: {response.status_code}")
+                        content = None
+                
+                else:
+                    # Generic requests
+                    response = self.session.get(url, headers=headers, timeout=30, verify=verify_ssl)
+                    if response.status_code == 200:
+                        content = response.text
+                    elif response.status_code == 403:
+                         # Reintento simple
+                         time.sleep(2)
+                         response = self.session.get(url, headers=headers, timeout=30, verify=verify_ssl)
+                         if response.status_code == 200:
+                             content = response.text
                 
                 if not content:
-                    print(f"Error HTTP {response.status_code}")
+                    # If we fell through or failed
+                    if not (self.country_code == 'kw' and response.status_code == 200): # Avoid double printing if handled above
+                         print(f"Error HTTP {response.status_code}")
                     return None
 
             if content:

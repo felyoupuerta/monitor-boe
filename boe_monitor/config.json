@@ -123,6 +123,38 @@
           }
         }
       }
+    },
+    "kw": {
+      "name": "Kuwait",
+      "country_code": "kw",
+      "url": "https://kuwaitalyawm.media.gov.kw",
+      "api_url_template": "https://kuwaitalyawm.media.gov.kw/online/MainEditions",
+      "fetch_method": "requests",
+      "verify_ssl": false,
+      "parser_rules": {
+        "engine": "html.parser",
+        "container": ".breifdiv",
+        "fields": {
+          "titulo": {
+            "selector": "a",
+            "type": "text"
+          },
+          "url": {
+            "selector": "a",
+            "type": "attr",
+            "attr": "data-load-url"
+          },
+          "seccion": {
+            "selector": ".category",
+            "type": "text",
+            "default": "Official Gazette"
+          },
+          "departamento": {
+            "selector": ".agent",
+            "type": "text"
+          }
+        }
+      }
     }
   }
 }
