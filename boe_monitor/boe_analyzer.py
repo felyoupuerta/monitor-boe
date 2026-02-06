@@ -274,7 +274,7 @@ class BOEMonitor:
     def create_email_html(self, items, has_changes=True):
         date_str = datetime.now().strftime('%d de %B de %Y')
         country_name = self.source_config.get('name', self.country_code.upper())
-        
+        country_url = self.source_config.get('url', '#')
         # Estilos inline para compatibilidad con clientes de correo
         html = f"""
         <html>
@@ -292,7 +292,8 @@ class BOEMonitor:
         </head>
         <body>
             <div class="header">
-                <h2>Monitor {country_name}</h2>
+                <h1>Monitor {country_name}</h1>
+                <h2>{country_url}, {date_str}</h2>
                 <p>{date_str}</p>
             </div>
         """
@@ -327,7 +328,7 @@ class BOEMonitor:
                 
         html += """
             <div style="text-align: center; margin-top: 30px; font-size: 0.8em; color: #999;">
-                Monitor Automatizado v2.0
+                Monitor BOES - {country_name} | {date_str} | Fuente: <a href="{country_url}">{country_url}</a> | Desarrollado por Felipe Angeriz para Anook
             </div>
         </body></html>
         """

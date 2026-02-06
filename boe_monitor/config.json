@@ -67,22 +67,24 @@
     "kw": {
       "name": "Kuwait",
       "country_code": "kw",
-      "url": "https://www.kuwaitalyoum.gov.kw",
-      "api_url_template": "<<<< RELLENAR CON LA URL DE BUSQUEDA (EJ: .gov.kw/search?date={date_dmy}) >>>>",
+      "url": "https://kuwaitalyawm.media.gov.kw",
+      "api_url_template": "https://kuwaitalyawm.media.gov.kw",
       "fetch_method": "selenium",
       "delay": 15,
       "parser_rules": {
         "engine": "html.parser",
-        "container": "<<<< RELLENAR SELECTOR DEL BLOQUE (EJ: div.news-item o tr.row) >>>>",
+        "container": "a", 
+        "_comentario": "Buscamos enlaces que contengan texto de fecha o número de edición",
         "fields": {
-          "titulo": { "selector": "<<<< RELLENAR SELECTOR TITULO (EJ: h3 a) >>>>", "type": "text" },
-          "url": { "selector": "<<<< RELLENAR SELECTOR ENLACE >>>>", "type": "attr", "attr": "href" },
+          "titulo": { "selector": "span, div", "type": "text" },
+          "url": { "selector": "", "type": "attr", "attr": "href" },
           "seccion": { "default": "Kuwait Al-Youm" },
-          "departamento": { "selector": "<<<< OPCIONAL >>>>", "type": "text", "default": "Official Gazette" }
+          "departamento": { "default": "Official Gazette" }
         }
       },
       "headers": {
-        "Accept-Language": "ar-KW,ar;q=0.9,en-US;q=0.8,en;q=0.7"
+        "Accept-Language": "ar-KW,ar;q=0.9,en-US;q=0.8,en;q=0.7",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       }
     }
   }
