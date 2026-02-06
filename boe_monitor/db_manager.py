@@ -42,7 +42,7 @@ class DatabaseManager:
             raise
     
     def init_tables(self) -> None:
-        """Crea la tabla de publicaciones si no existe."""
+        """Crea tabla si no existe. Migra columnas si falta content_hash."""
         self.connect()
         try:
             cursor = self.conn.cursor()
@@ -62,6 +62,21 @@ class DatabaseManager:
             )
             """
             cursor.execute(create_table_sql)
+            
+            cursor.execute(f"SHOW COLUMNS FROM {self.table} LIKE 'content_hash'")
+            if not cursor.fetchone():
+                self.logger.info(f"Migrando tabla {self.table}: agregando content_hash")
+                cursor.execute(f"ALTER TABLE {self.table} ADD COLUMN content_hash VARCHAR(64) AFTER url_pdf")
+                try:
+                    cursor.execute(f"ALTER TABLE {self.table} ADD UNIQUE KEY unique_publication (boe_date, content_hash)")
+                except:
+                    pass
+                try:
+                    cursor.execute(f"ALTER TABLE {self.table} ADD INDEX idx_hash (content_hash)")
+                except:
+                    pass
+                self.logger.info(f"Migración completada para {self.table}")
+            
             self.logger.info(f"Tabla '{self.table}' lista")
         except mysql.connector.Error as e:
             self.logger.error(f"Error al crear tabla: {e}")

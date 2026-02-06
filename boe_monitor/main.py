@@ -168,10 +168,10 @@ def main():
         print()
         if success:
             logger.info("Proceso completado exitosamente")
-            print("✓ Proceso completado exitosamente")
+            print("[OK] Proceso completado exitosamente")
         else:
             logger.warning("Proceso completado con advertencias")
-            print("⚠ Proceso completado con advertencias")
+            print("[WARN] Proceso completado con advertencias")
         
         print("=" * 70)
         

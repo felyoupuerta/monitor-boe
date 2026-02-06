@@ -68,9 +68,10 @@ class BOEMonitor:
         
         logger.info(f"Monitor inicializado para {self.country_name} ({self.country_code})")
     
-    def _get_date_formats(self, date: datetime) -> Dict[str, str]:
+    def _get_date_formats(self, date: datetime) -> Dict:
         """
-        Genera múltiples formatos de fecha para usar en templates de URL.
+        Genera múltiples formatos de fecha para templates de URL.
+        Incluye strings y valores numéricos para máxima compatibilidad.
         
         Args:
             date: Objeto datetime
@@ -84,9 +85,9 @@ class BOEMonitor:
             "date_iso": date.strftime("%Y-%m-%d"),
             "date_dmy": date.strftime("%d/%m/%Y"),
             "date_dmy_dot": date.strftime("%d.%m.%Y"),
-            "day": f"{date.day:02d}",
-            "month": f"{date.month:02d}",
-            "year": str(date.year)
+            "day": date.day,
+            "month": date.month,
+            "year": date.year
         }
     
     def fetch_data(self, date: datetime) -> Optional[str]:
@@ -155,8 +156,7 @@ class BOEMonitor:
     
     def _fetch_selenium(self, url: str, headers: Dict) -> Optional[str]:
         """
-        Descarga contenido dinámico usando Selenium.
-        Útil para sitios con JavaScript.
+        Descarga contenido dinámico usando Selenium con técnicas anti-Cloudflare.
         
         Args:
             url: URL a descargar
@@ -168,26 +168,85 @@ class BOEMonitor:
         try:
             from selenium import webdriver
             from selenium.webdriver.chrome.options import Options
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
             
             options = Options()
             options.add_argument('--headless')
             options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
             
-            driver = webdriver.Chrome(options=options)
-            delay = self.source_config.get('delay', 5)
+            # Técnicas anti-bot para Cloudflare
+            options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+            options.add_argument('--disable-blink-features=AutomationControlled')
+            options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            options.add_experimental_option('useAutomationExtension', False)
             
+            # Desabilitar WebDriver detection
+            options.add_argument('--disable-extensions')
+            options.add_argument('--disable-logging')
+            
+            driver = webdriver.Chrome(options=options)
+            
+            # Ejecutar script para ocultar webdriver
+            driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => false});")
+            
+            delay = self.source_config.get('delay', 10)
+            
+            logger.debug(f"Selenium obteniendo: {url}")
             driver.get(url)
+            
+            # Esperar a que cargue o a que desaparezca challenge
+            try:
+                WebDriverWait(driver, 15).until(
+                    EC.presence_of_all_elements_located((By.TAG_NAME, "a"))
+                )
+            except:
+                time.sleep(delay)
+            
             time.sleep(delay)
             
             html = driver.page_source
             driver.quit()
             
             logger.debug(f"Contenido Selenium obtenido: {len(html)} bytes")
+            
+            # Validar que no sea página de error Cloudflare
+            if "Un momento" in html or "one moment" in html.lower() or "cloudflare" in html.lower():
+                logger.warning("Cloudflare bloqueó Selenium, intentando con requests")
+                return self._fetch_requests_with_headers(url)
+            
             return html
             
         except Exception as e:
             logger.error(f"Error en Selenium: {e}")
+            logger.debug("Reintentando con requests")
+            return self._fetch_requests_with_headers(url)
+    
+    def _fetch_requests_with_headers(self, url: str) -> Optional[str]:
+        """Fetch con headers realistas para evitar bloqueos."""
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'fr-FR,fr;q=0.9,es;q=0.8',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
+            
+            response = self.session.get(url, headers=headers, timeout=30, verify=False)
+            
+            if response.status_code == 200:
+                logger.debug(f"Descarga exitosa con requests: {len(response.text)} bytes")
+                return response.text
+            else:
+                logger.warning(f"Error HTTP {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error en requests: {e}")
             return None
     
     def _fetch_kw(self, url: str, headers: Dict, date: datetime) -> Optional[str]:
@@ -300,29 +359,69 @@ class BOEMonitor:
             return []
     
     def _parse_fr(self, content: str) -> List[Dict]:
-        """Parser especializado para Francia (HTML)."""
+        """Parser especializado para Francia (HTML) - legifrance.gouv.fr"""
         try:
             soup = BeautifulSoup(content, 'html.parser')
             items = []
             
-            for container in soup.select('.notice, .result, article'):
-                title_elem = container.select_one('h3, h2')
-                link_elem = container.select_one('h3 a, h2 a')
+            # Estructura: article[class*="result-item"] > h2 > a
+            for article in soup.select('article[class*="result-item"]'):
+                # Buscar el título y link
+                title_elem = article.select_one('h2.title-result-item, h2')
+                if not title_elem:
+                    continue
                 
-                if title_elem and link_elem:
+                # El link está dentro del h2
+                link_elem = title_elem.select_one('a')
+                if not link_elem:
+                    continue
+                
+                href = link_elem.get('href', '').strip()
+                title = link_elem.get_text(strip=True)
+                
+                if href and title and len(title) > 8:
+                    # Construir URL completa si es relativa
+                    if href.startswith('/'):
+                        full_url = 'https://www.legifrance.gouv.fr' + href
+                    else:
+                        full_url = href
+                    
+                    # Extraer sección/departamento del atributo data o del contenedor
+                    section = 'JORF'
+                    department = 'Texte'
+                    
+                    # Buscar información adicional en el article
+                    meta_elem = article.select_one('[class*="nature"], [class*="type"], .type-result-item')
+                    if meta_elem:
+                        meta_text = meta_elem.get_text(strip=True)
+                        if meta_text:
+                            department = meta_text[:50]
+                    
                     item = {
-                        'titulo': title_elem.get_text(strip=True),
-                        'url': link_elem.get('href', ''),
-                        'seccion': 'JORF',
-                        'departamento': 'Texte',
+                        'titulo': title[:300],
+                        'url': full_url,
+                        'seccion': section,
+                        'departamento': department,
                     }
-                    items.append(item)
+                    
+                    # Evitar duplicados
+                    if not any(i['url'] == full_url for i in items):
+                        items.append(item)
             
             logger.info(f"Parseadas {len(items)} publicaciones de Francia")
+            
+            if not items:
+                logger.debug(f"HTML recibido tiene {len(content)} caracteres")
+                # Log algunos detalles para debugging
+                articles = soup.select('article')
+                logger.debug(f"Encontrados {len(articles)} articles totales")
+            
             return items
             
         except Exception as e:
             logger.error(f"Error parseando Francia: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return []
     
     def _parse_cz(self, content: str) -> List[Dict]:
@@ -453,12 +552,9 @@ class BOEMonitor:
             duplicates = len(items) - len(new_items)
             logger.info(f"Publicaciones: {len(items)} totales, {len(new_items)} nuevas, {duplicates} duplicadas")
             
-            # Enviar notificaciones si hay nuevas publicaciones
-            if new_items:
-                self.send_email_notification(new_items, recipient, smtp)
-                logger.info("Notificación de email enviada")
-            else:
-                logger.info("No hay nuevas publicaciones, email no enviado")
+            # Enviar resumen con TODAS las publicaciones encontradas
+            self.send_email_summary(items, new_items, recipient, smtp)
+            logger.info("Resumen enviado por email")
             
             return True
             
@@ -470,10 +566,22 @@ class BOEMonitor:
     
     def send_email_notification(self, items: List[Dict], recipient: List[str], smtp: Dict) -> None:
         """
-        Envía notificación por email con las nuevas publicaciones.
+        Envía notificación por email con publicaciones nuevas.
         
         Args:
             items: Lista de publicaciones nuevas
+            recipient: Lista de emails destinatarios
+            smtp: Configuración SMTP
+        """
+        self.send_email_summary(items, items, recipient, smtp)
+    
+    def send_email_summary(self, all_items: List[Dict], new_items: List[Dict], recipient: List[str], smtp: Dict) -> None:
+        """
+        Envía resumen detallado por email con todas las publicaciones y estadísticas.
+        
+        Args:
+            all_items: Lista de todas las publicaciones encontradas
+            new_items: Lista de publicaciones nuevas
             recipient: Lista de emails destinatarios
             smtp: Configuración SMTP
         """
@@ -489,7 +597,7 @@ class BOEMonitor:
             msg['To'] = recipient_str
             msg['From'] = smtp['username']
             
-            html_content = self._build_email_html(items)
+            html_content = self._build_email_html_summary(all_items, new_items)
             msg.attach(MIMEText(html_content, 'html'))
             
             with smtplib.SMTP(smtp['server'], smtp['port']) as server:
@@ -503,33 +611,63 @@ class BOEMonitor:
             logger.error(f"Error enviando email: {e}")
     
     def _build_email_html(self, items: List[Dict]) -> str:
+        """Construcción simple de HTML."""
+        return self._build_email_html_summary(items, items)
+    
+    def _build_email_html_summary(self, all_items: List[Dict], new_items: List[Dict]) -> str:
         """
-        Construye el contenido HTML del email.
+        Construye HTML con todas las publicaciones y estadísticas de cambios.
+        Muestra cuáles son nuevas y cuáles ya existían.
         
         Args:
-            items: Lista de publicaciones
+            all_items: Todas las publicaciones encontradas
+            new_items: Solo las nuevas publicaciones
         
         Returns:
             HTML del email
         """
         date_str = datetime.now().strftime('%d de %B de %Y')
+        new_count = len(new_items)
+        total_count = len(all_items)
+        duplicate_count = total_count - new_count
+        
+        # Determinar estado
+        if new_count > 0:
+            status_color = "#27ae60"
+            status_text = f"✨ {new_count} NUEVA(S) publicación(es)"
+        else:
+            status_color = "#3498db"
+            status_text = f"📋 Sin cambios - {total_count} publicaciones encontradas"
         
         html = f"""
         <html>
         <head>
+            <meta charset="utf-8">
             <style>
                 body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0; }}
                 .container {{ max-width: 800px; margin: 20px auto; background: #ffffff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }}
                 .header {{ background: #2c3e50; color: #ffffff; padding: 20px; text-align: center; }}
                 .header h1 {{ margin: 0; font-size: 24px; font-weight: 600; }}
                 .date {{ font-size: 14px; opacity: 0.8; margin-top: 5px; }}
+                .status {{ background: {status_color}; color: #ffffff; padding: 15px; text-align: center; font-weight: bold; font-size: 16px; }}
+                .stats {{ display: flex; justify-content: space-around; background: #ecf0f1; padding: 15px; text-align: center; }}
+                .stat {{ flex: 1; }}
+                .stat-number {{ font-size: 18px; font-weight: bold; color: #2c3e50; }}
+                .stat-label {{ font-size: 12px; color: #7f8c8d; }}
                 .content {{ padding: 20px; }}
-                .item {{ background: #ffffff; border-left: 4px solid #3498db; padding: 15px; margin-bottom: 15px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
-                .item-title {{ font-size: 16px; font-weight: 600; color: #2c3e50; margin-bottom: 8px; display: block; text-decoration: none; }}
+                .section {{ margin-bottom: 20px; }}
+                .section-title {{ font-size: 13px; font-weight: bold; color: #ffffff; background: #3498db; padding: 8px 12px; border-radius: 4px; margin-bottom: 10px; }}
+                .item {{ background: #ffffff; border-left: 4px solid #3498db; padding: 12px; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }}
+                .item-new {{ border-left-color: #27ae60; background-color: #f0fdf4; }}
+                .item-new .section-title {{ background: #27ae60; }}
+                .item-title {{ font-size: 14px; font-weight: 600; color: #2c3e50; margin-bottom: 6px; display: block; text-decoration: none; }}
+                .item-new .item-title {{ color: #27ae60; }}
                 .item-title:hover {{ color: #3498db; }}
-                .meta {{ font-size: 13px; color: #7f8c8d; display: flex; flex-wrap: wrap; gap: 10px; }}
-                .tag {{ background: #ecf0f1; padding: 2px 8px; border-radius: 12px; font-weight: 500; }}
-                .footer {{ background: #ecf0f1; padding: 15px; text-align: center; color: #7f8c8d; font-size: 12px; }}
+                .meta {{ font-size: 11px; color: #7f8c8d; display: flex; flex-wrap: wrap; gap: 6px; }}
+                .tag {{ background: #ecf0f1; padding: 2px 6px; border-radius: 10px; font-weight: 500; }}
+                .badge-new {{ background: #27ae60; color: #ffffff; padding: 2px 5px; border-radius: 3px; font-size: 10px; font-weight: bold; }}
+                .footer {{ background: #ecf0f1; padding: 15px; text-align: center; color: #7f8c8d; font-size: 11px; }}
+                .more-text {{ color: #7f8c8d; text-align: center; font-size: 12px; margin-top: 10px; }}
             </style>
         </head>
         <body>
@@ -538,35 +676,69 @@ class BOEMonitor:
                     <h1>Monitor BOE - {self.country_name.upper()}</h1>
                     <div class="date">{date_str}</div>
                 </div>
+                <div class="status">{status_text}</div>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-number">{total_count}</div>
+                        <div class="stat-label">Publicaciones encontradas</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number" style="color: #27ae60;">{new_count}</div>
+                        <div class="stat-label">Nuevas hoy</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number">{duplicate_count}</div>
+                        <div class="stat-label">Ya en BD</div>
+                    </div>
+                </div>
                 <div class="content">
-                    <p style="color: #666; font-size: 15px;">Se han encontrado <strong>{len(items)}</strong> nuevas publicaciones.</p>
         """
         
-        for item in items[:20]:  # Máximo 20 items por email
-            dept = item.get('departamento', 'General')
-            sect = item.get('seccion', 'Boletín')
-            
-            html += f"""
-            <div class="item">
-                <a href="{item.get('url', '#')}" class="item-title">{item.get('titulo', 'Sin título')}</a>
-                <div class="meta">
-                    <span class="tag">{dept}</span>
-                    <span class="tag">{sect}</span>
+        # Mostrar nuevas publicaciones primero
+        if new_items:
+            html += f'<div class="section"><div class="section-title">✨ NUEVAS PUBLICACIONES ({new_count})</div>'
+            for item in new_items[:25]:
+                dept = item.get('departamento', 'General')
+                sect = item.get('seccion', 'Boletín')
+                
+                html += f"""
+                <div class="item item-new">
+                    <div style="margin-bottom: 5px;"><span class="badge-new">NUEVO</span></div>
+                    <a href="{item.get('url', '#')}" class="item-title">{item.get('titulo', 'Sin título')}</a>
+                    <div class="meta">
+                        <span class="tag">{dept}</span>
+                        <span class="tag">{sect}</span>
+                    </div>
                 </div>
-            </div>
-            """
+                """
+            html += '</div>'
         
-        if len(items) > 20:
-            html += f"""
-            <p style="color: #e74c3c; font-weight: bold;">
-                ... y {len(items) - 20} publicaciones más
-            </p>
-            """
+        # Mostrar otras publicaciones
+        other_items = [i for i in all_items if i not in new_items]
+        if other_items:
+            html += f'<div class="section"><div class="section-title">📋 OTRAS PUBLICACIONES ({len(other_items)})</div>'
+            for item in other_items[:20]:
+                dept = item.get('departamento', 'General')
+                sect = item.get('seccion', 'Boletín')
+                
+                html += f"""
+                <div class="item">
+                    <a href="{item.get('url', '#')}" class="item-title">{item.get('titulo', 'Sin título')}</a>
+                    <div class="meta">
+                        <span class="tag">{dept}</span>
+                        <span class="tag">{sect}</span>
+                    </div>
+                </div>
+                """
+            
+            if len(other_items) > 20:
+                html += f'<div class="more-text">... y {len(other_items) - 20} publicaciones más</div>'
+            html += '</div>'
         
         html += """
                 </div>
                 <div class="footer">
-                    Generado automáticamente por BOE Monitor
+                    BOE Monitor - Sistema de monitorización automática de boletines oficiales
                 </div>
             </div>
         </body>
