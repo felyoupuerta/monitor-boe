@@ -1,192 +1,134 @@
 #!/usr/bin/env python3
-"""
-Script principal de BOE Monitor.
-Gestiona la ejecución del monitor para diferentes países.
-"""
-
 import json
 import sys
+import os
 import argparse
+import logging
 from pathlib import Path
-
+from dotenv import load_dotenv
 from boe_analyzer import BOEMonitor
-from logger_config import setup_logger
 
-logger = setup_logger(__name__)
+# Cargar variables de entorno desde .env
+load_dotenv()
 
-
-def load_config(config_file: str = 'config.json') -> dict:
-    """
-    Carga la configuración desde archivo JSON.
+def setup_logging(country_code):
+    """Configura el sistema de logs con rotación y formato profesional"""
+    log_dir = Path("logs") / country_code
+    log_dir.mkdir(parents=True, exist_ok=True)
     
-    Args:
-        config_file: Ruta del archivo de configuración
+    log_file = log_dir / f"monitor_{country_code}.log"
     
-    Returns:
-        Diccionario con configuración
-    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    return logging.getLogger(__name__)
+
+def load_config(config_file='config.json'):
     config_path = Path(config_file)
-    
     if not config_path.exists():
-        logger.error(f"Archivo de configuración no encontrado: {config_file}")
+        logging.error(f"No se encuentra el archivo de configuración '{config_file}'")
         sys.exit(1)
     
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
-        
-        # Validaciones básicas
-        required_keys = ['recipient_email', 'smtp_config', 'sources', 'db_config']
-        for key in required_keys:
-            if key not in config:
-                logger.error(f"Falta clave requerida en configuración: {key}")
-                sys.exit(1)
-        
-        logger.debug("Configuración cargada exitosamente")
         return config
-        
     except json.JSONDecodeError as e:
-        logger.error(f"Error al leer JSON: {e}")
+        logging.error(f"Error al leer config.json: {e}")
         sys.exit(1)
 
+def get_secure_config():
+    """Construye la configuración segura combinando JSON y variables de entorno"""
+    
+    # Validar que existan las credenciales críticas
+    if not os.getenv("SMTP_PASSWORD") or not os.getenv("DB_PASSWORD"):
+        print("❌ ERROR CRÍTICO: No se encontraron las contraseñas en el archivo .env")
+        print("Asegúrate de haber creado el archivo .env con DB_PASSWORD y SMTP_PASSWORD")
+        sys.exit(1)
 
-def get_available_countries(config: dict) -> dict:
-    """
-    Obtiene los países disponibles desde la configuración.
-    
-    Args:
-        config: Configuración cargada
-    
-    Returns:
-        Diccionario de países disponibles
-    """
-    sources = config.get('sources', {})
-    return {code: data.get('name', code) for code, data in sources.items()}
+    db_config = {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "user": os.getenv("DB_USER", "root"),
+        "password": os.getenv("DB_PASSWORD", ""),
+        "database": os.getenv("DB_NAME", "boe_monitor"),
+        "port": int(os.getenv("DB_PORT", 3306))
+    }
 
+    smtp_config = {
+        "server": os.getenv("SMTP_SERVER", "smtp.gmail.com"),
+        "port": int(os.getenv("SMTP_PORT", 587)),
+        "username": os.getenv("SMTP_USER", ""),
+        "password": os.getenv("SMTP_PASSWORD", "")
+    }
 
-def validate_source_config(source_config: dict, country_code: str) -> bool:
-    """
-    Valida que la configuración de fuente sea válida.
-    
-    Args:
-        source_config: Configuración de la fuente
-        country_code: Código del país
-    
-    Returns:
-        True si válida
-    """
-    required_fields = ['api_url_template', 'fetch_method']
-    
-    for field in required_fields:
-        if field not in source_config:
-            logger.error(f"Falta campo requerido en fuente {country_code}: {field}")
-            return False
-    
-    return True
-
+    return db_config, smtp_config
 
 def main():
-    """Función principal."""
-    parser = argparse.ArgumentParser(
-        description="Monitor de Boletines Oficiales (BOE)",
-        epilog="Ejemplo: python main.py --country es"
-    )
-    
-    parser.add_argument(
-        '--country', '-c',
-        help='Código del país a analizar (ej: es, fr, cz, kw)',
-        default=None
-    )
-    parser.add_argument(
-        '--list', '-l',
-        action='store_true',
-        help='Listar países disponibles'
-    )
+    parser = argparse.ArgumentParser(description="Monitor de Boletines Oficiales")
+    parser.add_argument('--country', '-c', help='Código del país a analizar (ej: es, fr)')
+    parser.add_argument('--list', '-l', action='store_true', help='Listar fuentes disponibles')
+    parser.add_argument('country_arg', nargs='?', help='Nombre o código del país (opcional)')
     
     args = parser.parse_args()
     
-    print("=" * 70)
-    print("MONITOR DE BOLETINES OFICIALES".center(70))
-    print("=" * 70)
-    print()
-    
-    # Cargar configuración
     config = load_config()
-    available_countries = get_available_countries(config)
+    sources = config.get('sources', {})
     
-    # Si se pide listar países
     if args.list:
-        print("Países disponibles:")
-        print()
-        for code, name in available_countries.items():
-            print(f"  {code:4s} - {name}")
-        print()
+        print("Fuentes disponibles:")
+        for code, data in sources.items():
+            print(f" - {code}: {data.get('name', code)}")
         return
-    
-    # Determinar país a analizar
+
+    # Determinar país objetivo
+    target_country = 'es' 
     if args.country:
-        country_code = args.country.lower()
-    else:
-        country_code = 'es'
+        target_country = args.country
+    elif args.country_arg:
+        arg_lower = args.country_arg.lower().replace('--', '')
+        for code, data in sources.items():
+            if code == arg_lower or data.get('name', '').lower() == arg_lower:
+                target_country = code
+                break
     
-    # Validar que el país exista
-    if country_code not in available_countries:
-        logger.error(f"País no configurado: {country_code}")
-        print()
-        print("Usa --list para ver países disponibles")
-        sys.exit(1)
-    
-    # Obtener configuración del país
-    source_config = config['sources'][country_code].copy()
-    source_config['country_code'] = country_code
-    
-    # Validar configuración
-    if not validate_source_config(source_config, country_code):
-        sys.exit(1)
-    
-    country_name = source_config.get('name', country_code)
-    print(f"Analizando: {country_name} ({country_code})")
-    print(f"Método de obtención: {source_config.get('fetch_method')}")
-    print()
-    
-    # Crear y ejecutar monitor
-    try:
-        db_config = config.get('db_config')
-        data_dir = config.get('data_dir', './boe_data')
-        
-        monitor = BOEMonitor(
-            db_config=db_config,
-            source_config=source_config,
-            data_dir=data_dir
-        )
-        
-        success = monitor.run_daily_check(
-            recipient=config['recipient_email'],
-            smtp=config['smtp_config']
-        )
-        
-        print()
-        if success:
-            logger.info("Proceso completado exitosamente")
-            print("[OK] Proceso completado exitosamente")
-        else:
-            logger.warning("Proceso completado con advertencias")
-            print("[WARN] Proceso completado con advertencias")
-        
-        print("=" * 70)
-        
-    except KeyboardInterrupt:
-        logger.info("Proceso interrumpido por usuario")
-        print("\n\nProceso interrumpido")
-        sys.exit(0)
-    
-    except Exception as e:
-        logger.error(f"Error fatal: {e}", exc_info=True)
-        print()
-        print("ERROR FATAL")
-        print(f"Detalles: {e}")
+    if target_country not in sources:
+        print(f"❌ No existe configuración para el país '{target_country}'")
         sys.exit(1)
 
+    # Configurar Logging
+    logger = setup_logging(target_country)
+    logger.info("=" * 60)
+    logger.info(f"MONITOR DE BOLETINES: INICIANDO PAÍS {target_country.upper()}")
+    
+    # Obtener configuración segura
+    db_config, smtp_config = get_secure_config()
+    source_config = sources[target_country]
+    source_config['country_code'] = target_country
+    data_dir = config.get('data_dir', './boe_data')
+    
+    # Iniciar Monitor
+    monitor = BOEMonitor(db_config=db_config, source_config=source_config, data_dir=data_dir)
+    
+    # Sobreescribir el email del JSON con el de las variables si es necesario, 
+    # o usar el del JSON. Aquí usamos el del JSON.
+    recipient_email = config.get('recipient_email', [])
+    
+    success = monitor.run_daily_check(
+        recipient_email=recipient_email,
+        smtp_config=smtp_config
+    )
+    
+    if success:
+        logger.info("Proceso completado exitosamente")
+    else:
+        logger.warning("El proceso finalizó con advertencias")
+    
+    logger.info("=" * 60)
 
 if __name__ == "__main__":
     main()

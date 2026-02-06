@@ -1,26 +1,13 @@
 {
-  "_comentario": "JSON deconfiguracion del programa Felipe Angeriz ",
+  "_comentario": "Configuración general. Las contraseñas se cargan desde el archivo .env",
   "recipient_email": [
     "felipe.angeriz.e@gmail.com",
     "slatumba@gmail.com"
   ],
-  "smtp_config": {
-    "server": "smtp.gmail.com",
-    "port": 587,
-    "username": "felipe.angeriz.e@gmail.com",
-    "password": "rtyr opyl zege ezuj"
-  },
   "data_dir": "./boe_data",
   "notifications": {
     "send_if_no_changes": false,
     "max_items_in_email": 20
-  },
-  "db_config": {
-    "host": "localhost",
-    "user": "boe_monitor",
-    "password": "secure_boe_password",
-    "database": "boe_monitor",
-    "port": 3306
   },
   "sources": {
     "es": {
@@ -31,26 +18,11 @@
         "engine": "xml",
         "container": "item",
         "fields": {
-          "titulo": {
-            "selector": "titulo",
-            "type": "text"
-          },
-          "url": {
-            "selector": "urlPdf",
-            "type": "text"
-          },
-          "seccion": {
-            "selector": "seccion",
-            "type": "text"
-          },
-          "departamento": {
-            "selector": "departamento",
-            "type": "text"
-          },
-          "rango": {
-            "selector": "rango",
-            "type": "text"
-          }
+          "titulo": { "selector": "titulo", "type": "text" },
+          "url": { "selector": "urlPdf", "type": "text" },
+          "seccion": { "selector": "seccion", "type": "text" },
+          "departamento": { "selector": "departamento", "type": "text" },
+          "rango": { "selector": "rango", "type": "text" }
         }
       },
       "headers": {
@@ -67,29 +39,11 @@
         "engine": "html.parser",
         "container": ".notice, .result, article",
         "fields": {
-          "titulo": {
-            "selector": "h3, h2",
-            "type": "text"
-          },
-          "url": {
-            "selector": "h3 a, h2 a",
-            "type": "attr",
-            "attr": "href"
-          },
-          "seccion": {
-            "selector": "span[class*='section']",
-            "type": "text",
-            "default": "JORF"
-          },
-          "departamento": {
-            "selector": "span[class*='type']",
-            "type": "text",
-            "default": "Texte"
-          }
+          "titulo": { "selector": "h3, h2", "type": "text" },
+          "url": { "selector": "h3 a, h2 a", "type": "attr", "attr": "href" },
+          "seccion": { "selector": "span[class*='section']", "type": "text", "default": "JORF" },
+          "departamento": { "selector": "span[class*='type']", "type": "text", "default": "Texte" }
         }
-      },
-      "headers": {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       }
     },
     "cz": {
@@ -102,58 +56,33 @@
         "engine": "html.parser",
         "container": "tr.pravni-akt-row",
         "fields": {
-          "titulo": {
-            "selector": "td.cell-nazev a",
-            "type": "text"
-          },
-          "url": {
-            "selector": "td.cell-nazev a",
-            "type": "attr",
-            "attr": "href"
-          },
-          "rango": {
-            "selector": "td.cell-cislo",
-            "type": "text"
-          },
-          "seccion": {
-            "default": "Sbírka zákonů"
-          },
-          "departamento": {
-            "default": "Nová legislativa"
-          }
+          "titulo": { "selector": "td.cell-nazev a", "type": "text" },
+          "url": { "selector": "td.cell-nazev a", "type": "attr", "attr": "href" },
+          "rango": { "selector": "td.cell-cislo", "type": "text" },
+          "seccion": { "default": "Sbírka zákonů" },
+          "departamento": { "default": "Nová legislativa" }
         }
       }
     },
     "kw": {
       "name": "Kuwait",
       "country_code": "kw",
-      "url": "https://kuwaitalyawm.media.gov.kw",
-      "api_url_template": "https://kuwaitalyawm.media.gov.kw/online/MainEditions",
-      "fetch_method": "requests",
-      "verify_ssl": false,
+      "url": "https://www.kuwaitalyoum.gov.kw",
+      "api_url_template": "<<<< RELLENAR CON LA URL DE BUSQUEDA (EJ: .gov.kw/search?date={date_dmy}) >>>>",
+      "fetch_method": "selenium",
+      "delay": 15,
       "parser_rules": {
         "engine": "html.parser",
-        "container": ".breifdiv",
+        "container": "<<<< RELLENAR SELECTOR DEL BLOQUE (EJ: div.news-item o tr.row) >>>>",
         "fields": {
-          "titulo": {
-            "selector": "a",
-            "type": "text"
-          },
-          "url": {
-            "selector": "a",
-            "type": "attr",
-            "attr": "data-load-url"
-          },
-          "seccion": {
-            "selector": ".category",
-            "type": "text",
-            "default": "Official Gazette"
-          },
-          "departamento": {
-            "selector": ".agent",
-            "type": "text"
-          }
+          "titulo": { "selector": "<<<< RELLENAR SELECTOR TITULO (EJ: h3 a) >>>>", "type": "text" },
+          "url": { "selector": "<<<< RELLENAR SELECTOR ENLACE >>>>", "type": "attr", "attr": "href" },
+          "seccion": { "default": "Kuwait Al-Youm" },
+          "departamento": { "selector": "<<<< OPCIONAL >>>>", "type": "text", "default": "Official Gazette" }
         }
+      },
+      "headers": {
+        "Accept-Language": "ar-KW,ar;q=0.9,en-US;q=0.8,en;q=0.7"
       }
     }
   }

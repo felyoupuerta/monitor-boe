@@ -1,200 +1,178 @@
 #!/usr/bin/env python3
-"""
-Gestor de base de datos para BOE Monitor.
-Maneja la persistencia de publicaciones y detección de cambios.
-"""
-
 import mysql.connector
-import hashlib
-from typing import Dict, Optional, Tuple
-from logger_config import setup_logger
-
-logger = setup_logger(__name__)
-
+from mysql.connector import pooling
+from datetime import datetime, date as _date
+import logging
+import time
 
 class DatabaseManager:
-    """
-    Gestor de base de datos para publicaciones del BOE.
-    Valida duplicados y cambios basándose en hash de contenido.
-    """
-    
-    def __init__(self, db_config: Dict, country_code: str = 'es'):
-        """
-        Inicializa el gestor de base de datos.
-        
-        Args:
-            db_config: Diccionario con configuración de conexión
-            country_code: Código del país (por defecto 'es')
-        """
+    def __init__(self, db_config, country_code='es'):
         self.config = db_config
-        self.country_code = country_code.lower()
-        self.table = f"publications_{self.country_code}"
+        self.logger = logging.getLogger(__name__)
         self.conn = None
-        self.logger = logger
-    
-    def connect(self) -> None:
-        """Establece conexión con la base de datos."""
+        self.cursor = None
+        self.country_code = country_code.lower()
+        self.table_publications = f"publications_{self.country_code}"
+        self.table_logs = f"execution_logs_{self.country_code}"
+        
+        # Configuración de pool para reconexión automática
+        self.db_config_safe = self.config.copy()
+        self.db_config_safe['autocommit'] = True
+
+    def connect(self):
+        """Establishes connection to the database with retry logic"""
         try:
-            self.conn = mysql.connector.connect(**self.config, autocommit=True)
-            self.logger.debug(f"Conexión exitosa a BD para país: {self.country_code}")
-        except mysql.connector.Error as e:
-            self.logger.error(f"Error de conexión a BD: {e}")
-            raise
-    
-    def init_tables(self) -> None:
-        """Crea tabla si no existe. Migra columnas si falta content_hash."""
-        self.connect()
-        try:
-            cursor = self.conn.cursor()
-            create_table_sql = f"""
-            CREATE TABLE IF NOT EXISTS {self.table} (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                boe_date DATE NOT NULL,
-                title TEXT NOT NULL,
-                section VARCHAR(255),
-                department VARCHAR(255),
-                url_pdf VARCHAR(512),
-                content_hash VARCHAR(64),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY unique_publication (boe_date, content_hash),
-                INDEX idx_date (boe_date),
-                INDEX idx_hash (content_hash)
-            )
-            """
-            cursor.execute(create_table_sql)
-            
-            cursor.execute(f"SHOW COLUMNS FROM {self.table} LIKE 'content_hash'")
-            if not cursor.fetchone():
-                self.logger.info(f"Migrando tabla {self.table}: agregando content_hash")
-                cursor.execute(f"ALTER TABLE {self.table} ADD COLUMN content_hash VARCHAR(64) AFTER url_pdf")
-                try:
-                    cursor.execute(f"ALTER TABLE {self.table} ADD UNIQUE KEY unique_publication (boe_date, content_hash)")
-                except:
-                    pass
-                try:
-                    cursor.execute(f"ALTER TABLE {self.table} ADD INDEX idx_hash (content_hash)")
-                except:
-                    pass
-                self.logger.info(f"Migración completada para {self.table}")
-            
-            self.logger.info(f"Tabla '{self.table}' lista")
-        except mysql.connector.Error as e:
-            self.logger.error(f"Error al crear tabla: {e}")
-            raise
-        finally:
-            if cursor:
-                cursor.close()
-    
-    def _generate_content_hash(self, item: Dict) -> str:
-        """
-        Genera hash SHA256 del contenido de la publicación.
-        El hash incluye título, sección y departamento para detectar cambios.
-        
-        Args:
-            item: Diccionario con datos de la publicación
-        
-        Returns:
-            Hash SHA256 en hexadecimal
-        """
-        content = f"{item.get('titulo', '')}{item.get('seccion', '')}{item.get('departamento', '')}"
-        return hashlib.sha256(content.encode('utf-8')).hexdigest()
-    
-    def publication_exists(self, item: Dict, date_obj) -> bool:
-        """
-        Verifica si una publicación ya existe en la BD.
-        
-        Args:
-            item: Diccionario con datos de la publicación
-            date_obj: Fecha de la publicación
-        
-        Returns:
-            True si existe, False en caso contrario
-        """
-        content_hash = self._generate_content_hash(item)
-        cursor = self.conn.cursor()
-        try:
-            query = f"SELECT id FROM {self.table} WHERE boe_date=%s AND content_hash=%s"
-            cursor.execute(query, (date_obj, content_hash))
-            return cursor.fetchone() is not None
-        except mysql.connector.Error as e:
-            self.logger.error(f"Error al verificar publicación: {e}")
-            return False
-        finally:
-            if cursor:
-                cursor.close()
-    
-    def save_publication(self, item: Dict, date_obj) -> bool:
-        """
-        Guarda una nueva publicación en la BD si no existe.
-        
-        Args:
-            item: Diccionario con datos de la publicación
-            date_obj: Fecha de la publicación
-        
-        Returns:
-            True si se guardó, False si ya existía
-        """
-        if self.publication_exists(item, date_obj):
-            return False
-        
-        content_hash = self._generate_content_hash(item)
-        cursor = self.conn.cursor()
-        
-        try:
-            insert_sql = f"""
-            INSERT INTO {self.table} 
-            (boe_date, title, section, department, url_pdf, content_hash) 
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """
-            
-            cursor.execute(insert_sql, (
-                date_obj,
-                item.get('titulo', ''),
-                item.get('seccion', ''),
-                item.get('departamento', ''),
-                item.get('url', ''),
-                content_hash
-            ))
-            
-            self.logger.debug(f"Publicación guardada: {item.get('titulo', '')[:50]}...")
+            # Intentar reconectar si existe conexión pero no responde
+            if self.conn and self.conn.is_connected():
+                return True
+
+            self.conn = mysql.connector.connect(**self.db_config_safe)
+            self.cursor = self.conn.cursor(dictionary=True)
             return True
             
-        except mysql.connector.Error as e:
-            if "Duplicate entry" in str(e):
-                self.logger.debug("Publicación duplicada (esperada)")
-                return False
-            else:
-                self.logger.error(f"Error al guardar publicación: {e}")
-                return False
-        finally:
-            if cursor:
-                cursor.close()
-    
-    def get_publications_by_date(self, date_obj, country_filter: Optional[str] = None) -> list:
-        """
-        Obtiene todas las publicaciones de una fecha específica.
-        
-        Args:
-            date_obj: Fecha a consultar
-            country_filter: Opcional, para validación
-        
-        Returns:
-            Lista de publicaciones
-        """
-        cursor = self.conn.cursor(dictionary=True)
+        except mysql.connector.Error as err:
+            if err.errno == 1049:  # Unknown database
+                self.logger.warning(f"Base de datos no encontrada, intentando crearla...")
+                return self.create_database()
+            self.logger.error(f"Error de conexión a BD: {err}")
+            return False
+
+    def create_database(self):
         try:
-            query = f"SELECT * FROM {self.table} WHERE boe_date=%s ORDER BY id DESC"
-            cursor.execute(query, (date_obj,))
-            return cursor.fetchall()
-        except mysql.connector.Error as e:
-            self.logger.error(f"Error al obtener publicaciones: {e}")
+            # Conexión temporal sin especificar DB para poder crearla
+            temp_config = self.db_config_safe.copy()
+            if 'database' in temp_config:
+                del temp_config['database']
+                
+            temp_conn = mysql.connector.connect(**temp_config)
+            cursor = temp_conn.cursor()
+            db_name = self.config.get('database', 'boe_monitor')
+            
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
+            self.logger.info(f"Base de datos '{db_name}' creada/verificada.")
+            
+            cursor.close()
+            temp_conn.close()
+            return self.connect()
+        except mysql.connector.Error as err:
+            self.logger.critical(f"Error fatal al crear BD: {err}")
+            return False
+
+    def init_tables(self):
+        if not self.connect():
+            return False
+
+        try:
+            # Tabla de publicaciones optimizada
+            self.cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self.table_publications} (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    boe_date DATE NOT NULL,
+                    title MEDIUMTEXT NOT NULL,
+                    section VARCHAR(255),
+                    department VARCHAR(255),
+                    rank_type VARCHAR(255),
+                    url_pdf VARCHAR(512),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_date (boe_date),
+                    INDEX idx_title (title(50))
+                ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+            """)
+
+            # Tabla de logs
+            self.cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self.table_logs} (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    execution_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    status VARCHAR(50),
+                    items_found INT DEFAULT 0,
+                    new_items INT DEFAULT 0,
+                    removed_items INT DEFAULT 0,
+                    message TEXT
+                )
+            """)
+            
+            self.logger.info(f"Tablas inicializadas para '{self.country_code}'.")
+            return True
+        except mysql.connector.Error as err:
+            self.logger.error(f"Error al inicializar tablas: {err}")
+            return False
+
+    def save_publication(self, item, date_obj):
+        """Saves a single publication if it doesn't exist"""
+        if not self.connect():
+            return False
+            
+        try:
+            if isinstance(date_obj, _date):
+                date_param = date_obj
+            elif isinstance(date_obj, datetime):
+                date_param = date_obj.date()
+            else:
+                date_param = date_obj
+
+            title = item.get('titulo', '')
+            # Truncar título si es excesivamente largo para evitar errores
+            if len(title) > 16000: title = title[:16000]
+
+            check_sql = f"SELECT id FROM {self.table_publications} WHERE boe_date = %s AND title = %s LIMIT 1"
+            self.cursor.execute(check_sql, (date_param, title))
+            
+            if self.cursor.fetchone():
+                return False
+
+            sql = f"""
+                INSERT INTO {self.table_publications} 
+                (boe_date, title, section, department, rank_type, url_pdf) 
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            values = (
+                date_param,
+                title,
+                item.get('seccion', '')[:255],
+                item.get('departamento', '')[:255],
+                item.get('rango', '')[:255],
+                item.get('url', '')[:512]
+            )
+            self.cursor.execute(sql, values)
+            return True
+            
+        except mysql.connector.Error as err:
+            self.logger.error(f"Error guardando publicación: {err}")
+            return False
+
+    def get_publications_by_date(self, date_obj):
+        if not self.connect():
             return []
-        finally:
-            if cursor:
-                cursor.close()
-    
-    def close(self) -> None:
-        """Cierra la conexión con la base de datos."""
-        if self.conn:
+            
+        try:
+            sql = f"""
+                SELECT title as titulo, section as seccion, 
+                       department as departamento, rank_type as rango, 
+                       url_pdf as url
+                FROM {self.table_publications} 
+                WHERE boe_date = %s
+            """
+            self.cursor.execute(sql, (date_obj,))
+            return self.cursor.fetchall()
+        except mysql.connector.Error as err:
+            self.logger.error(f"Error recuperando publicaciones: {err}")
+            return []
+
+    def log_execution(self, status, items_found, new_items, removed_items, message=""):
+        if not self.connect():
+            return
+            
+        try:
+            sql = f"""
+                INSERT INTO {self.table_logs} 
+                (status, items_found, new_items, removed_items, message) 
+                VALUES (%s, %s, %s, %s, %s)
+            """
+            self.cursor.execute(sql, (status, items_found, new_items, removed_items, message))
+        except mysql.connector.Error as err:
+            self.logger.error(f"Error escribiendo log en BD: {err}")
+
+    def close(self):
+        if self.conn and self.conn.is_connected():
             self.conn.close()
-            self.logger.debug("Conexión a BD cerrada")
