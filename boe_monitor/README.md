@@ -1,46 +1,136 @@
-### BOE
-### FELIPE ANGERIZ 
-### DEPENDENCIAS 
+# BOE Monitor
+
+Monitor automático profesional de Boletines Oficiales con soporte multi-país.
+
+## Características
+
+- 🌍 **Multi-país**: España, Francia, República Checa, Kuwait
+- 🔄 **Automático**: Ejecución diaria programada
+- 📧 **Notificaciones**: Correos HTML profesionales
+- 💾 **Persistencia**: Base de datos MySQL con deduplicación inteligente
+- 📊 **Logging**: Sistema de logging estructurado
+- 🚀 **Producción-ready**: Código limpio y documentado
+
+## Requisitos
+
+- Python 3.8+
+- MySQL Server 5.7+
+- Chrome/Chromium (opcional, para Francia y República Checa)
+
+## Instalación Rápida
+
+```bash
+# 1. Descargar dependencias
 pip install -r requirements.txt
 
-### archivo de configruracion
-config.json  
+# 2. Configurar base de datos
+# Ver DOCUMENTATION.md para pasos detallados
 
+# 3. Crear configuración
+cp config.example.json config.json
+# Editar config.json con tus datos
 
-### Estructura de archivos
+# 4. Probar email
+python tests/test_email.py
+```
 
-boe_monitor/
-├── main.py                  # Archivo main del proyecto, este importa a boe analyzer
-├── boe_analyzer.py          #Script principal
-├── config.json              #configuración
-├── README.md               
-├── boe_data/               # datos boe pasados
-│   ├── boe_20240101.json
-│   ├── boe_20240102.json
-│   └── +++
-└── logs/                   # Logs de ejecución
+## Uso
 
-ejecutar analisi de Francia:
-            python main.py --country fr
+```bash
+# Ejecución manual - España
+python main.py
 
-España:
-            python main.py --country es
+# Ejecución manual - Otros países
+python main.py --country fr    # Francia
+python main.py --country cz    # República Checa
+python main.py --country kw    # Kuwait
 
+# Ver países disponibles
+python main.py --list
 
-ARCHIVOS DE EJECUCION:
-            /opt/run_monitor_espania.sh
-            /opt/run_monitor_francia.sh
+# Ejecución automática (cron)
+0 8 * * * cd /ruta/al/proyecto && python main.py --country es
+```
 
-PARA EL CRONTAB LOS MOBIMOS COMO UN BINARIO:
-            /usr/bin/monesp -----> monitor - españa(esp)
-            /usr/bin/monfr -----> monitor - francia(fr)
+## Estructura
 
-ARCHIVO EN CRONTAB DE ROOT(SE EJECUTA TODOS LOS DÍAS A LAS 8 DE LA MAÑANA):
-            0 8 * * * /usr/bin/monesp
-            0 8 * * * /usr/bin/monfr
+```
+├── main.py              # Script principal
+├── boe_analyzer.py      # Lógica de monitor
+├── db_manager.py        # Gestor de BD
+├── logger_config.py     # Sistema de logging
+├── config.json          # Configuración (genera desde .example)
+├── config.example.json  # Template de configuración
+├── tests/               # Scripts de prueba
+├── boe_data/            # Datos históricos
+├── logs/                # Archivos de log
+└── DOCUMENTATION.md     # Documentación completa
+```
 
+## Documentación
 
-EXTRA POR SI SE TRABAJA COMO YO EN WINDOWS Y UNIX(POR LAS DUDAS):
-            comando para pasar archivos de windows a UNIX(problemas con los espacios en blanco)
-            sudo pacman -S dos2unix
-            dos2unix <nombre del archivo>
+Ver [DOCUMENTATION.md](DOCUMENTATION.md) para:
+- Instalación detallada
+- Configuración completa
+- Escalabilidad de países
+- Troubleshooting
+- Mantenimiento en producción
+
+## Autenticación Gmail
+
+Para usar Gmail como servidor SMTP:
+
+1. Habilitar verificación en 2 pasos: https://myaccount.google.com/security
+2. Generar "Contraseña de aplicación": https://myaccount.google.com/apppasswords
+3. Usar esa contraseña en `config.json` (no tu contraseña personal)
+
+## Quick Start - Producción
+
+```bash
+# Crear usuario BD
+CREATE USER 'boe_monitor'@'localhost' IDENTIFIED BY 'password_segura';
+GRANT ALL PRIVILEGES ON boe_monitor.* TO 'boe_monitor'@'localhost';
+
+# Instalar
+pip install -r requirements.txt
+
+# Configurar
+cp config.example.json config.json
+nano config.json  # Editar con tus datos
+
+# Probar
+python tests/test_email.py
+
+# Programar ejecución (cron)
+crontab -e
+# Agregar: 0 8 * * * cd /ruta/al/proyecto && python main.py --country es
+```
+
+## Troubleshooting
+
+| Error | Solución |
+|-------|----------|
+| SMTPAuthenticationError | Ver sección Gmail - usar contraseña de aplicación |
+| Conexión BD rechazada | Verificar credenciales MySQL en config.json |
+| No descarga datos | Verificar URL en config, revisar logs |
+| Chrome no encontrado | Instalar chromium/chrome (requerido para Selenium) |
+
+Ver más en [DOCUMENTATION.md](DOCUMENTATION.md)
+
+## Desarrollo
+
+```bash
+# Crear nuevo país
+1. Agregar entrada en config.json
+2. (Opcional) Crear método _fetch_XX() para descarga especial
+3. (Opcional) Crear método _parse_XX() para parseo especial
+4. Probar: python main.py --country xx
+```
+
+## Autor
+
+**Felipe Angeriz** - Enero 2026
+
+## Versión
+
+1.0.0 - Production Ready

@@ -1,0 +1,152 @@
+{
+  "recipient_email": [
+    "tu_email@gmail.com"
+  ],
+  "smtp_config": {
+    "server": "smtp.gmail.com",
+    "port": 587,
+    "username": "tu_email@gmail.com",
+    "password": "tu_contraseña_de_aplicacion"
+  },
+  "data_dir": "./boe_data",
+  "db_config": {
+    "host": "localhost",
+    "user": "boe_monitor",
+    "password": "secure_password",
+    "database": "boe_monitor",
+    "port": 3306
+  },
+  "sources": {
+    "es": {
+      "country_code": "es",
+      "name": "España",
+      "url": "https://www.boe.es",
+      "api_url_template": "https://www.boe.es/datosabiertos/api/boe/sumario/{date}",
+      "fetch_method": "requests",
+      "verify_ssl": true,
+      "timeout": 30,
+      "headers": {
+        "Accept": "application/xml",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      },
+      "parser_rules": {
+        "engine": "xml",
+        "container": "item",
+        "fields": {
+          "titulo": {
+            "selector": "titulo",
+            "type": "text"
+          },
+          "url": {
+            "selector": "urlPdf",
+            "type": "text"
+          },
+          "seccion": {
+            "selector": "seccion",
+            "type": "text"
+          },
+          "departamento": {
+            "selector": "departamento",
+            "type": "text"
+          },
+          "rango": {
+            "selector": "rango",
+            "type": "text"
+          }
+        }
+      }
+    },
+    "fr": {
+      "country_code": "fr",
+      "name": "Francia",
+      "url": "https://www.legifrance.gouv.fr",
+      "api_url_template": "https://www.legifrance.gouv.fr/search/jorf?tab_selection=jorf&searchField=ALL&searchType=ALL&pageSize=25&page=1&sortValue=SIGNATURE_DATE_DESC",
+      "fetch_method": "selenium",
+      "verify_ssl": true,
+      "delay": 10,
+      "timeout": 60,
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      },
+      "parser_rules": {
+        "engine": "html.parser",
+        "container": ".notice, .result, article",
+        "fields": {
+          "titulo": {
+            "selector": "h3, h2",
+            "type": "text"
+          },
+          "url": {
+            "selector": "h3 a, h2 a",
+            "type": "attr",
+            "attr": "href"
+          },
+          "seccion": {
+            "selector": "span[class*='section']",
+            "type": "text",
+            "default": "JORF"
+          },
+          "departamento": {
+            "selector": "span[class*='type']",
+            "type": "text",
+            "default": "Texte"
+          }
+        }
+      }
+    },
+    "cz": {
+      "country_code": "cz",
+      "name": "República Checa",
+      "url": "https://www.e-sbirka.cz",
+      "api_url_template": "https://www.e-sbirka.cz/vyhledavani?vyhlaseno_od={date_dmy_dot}&vyhlaseno_do={date_dmy_dot}",
+      "fetch_method": "selenium",
+      "verify_ssl": true,
+      "delay": 5,
+      "timeout": 60,
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      },
+      "parser_rules": {
+        "engine": "html.parser",
+        "container": "tr.pravni-akt-row",
+        "fields": {
+          "titulo": {
+            "selector": "td.cell-nazev a",
+            "type": "text"
+          },
+          "url": {
+            "selector": "td.cell-nazev a",
+            "type": "attr",
+            "attr": "href"
+          },
+          "rango": {
+            "selector": "td.cell-cislo",
+            "type": "text"
+          },
+          "seccion": {
+            "default": "Sbírka zákonů"
+          },
+          "departamento": {
+            "default": "Nová legislativa"
+          }
+        }
+      }
+    },
+    "kw": {
+      "country_code": "kw",
+      "name": "Kuwait",
+      "url": "https://kuwaitalyawm.media.gov.kw",
+      "api_url_template": "https://kuwaitalyawm.media.gov.kw/online/MainEditions",
+      "fetch_method": "requests",
+      "verify_ssl": false,
+      "timeout": 30,
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      },
+      "parser_rules": {
+        "engine": "html.parser",
+        "container": ".briefdiv"
+      }
+    }
+  }
+}
