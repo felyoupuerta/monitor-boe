@@ -16,7 +16,7 @@ BOE Monitor es una aplicación Python profesional para monitorear automáticamen
 
 - **Python 3.8+**
 - **MySQL Server 5.7+**
-- **Chrome/Chromium** (solo si se usa Selenium para Francia o República Checa)
+- **Chrome/Chromium** (solo si se usa Selenium Francia República Checa)
 
 ## Instalación
 
@@ -155,7 +155,7 @@ monitor-boe/
 2. **BOEMonitor** → Clase principal que orquesta:
    - **fetch_data()** → Descarga contenido según país
    - **parse()** → Extrae publicaciones según formato
-   - **run_daily_check()** → Orquesta descarga→parseo→guardado→notificación
+   - **run()** → Orquesta descarga→parseo→guardado→notificación (soporta fecha personalizada)
 3. **DatabaseManager** → Gestiona BD (deduplicación, almacenamiento)
 4. **Email** → Envía notificaciones formateadas en HTML
 

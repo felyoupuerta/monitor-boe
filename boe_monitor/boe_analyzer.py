@@ -334,53 +334,61 @@ class BOEMonitor:
         """
         return html
     
-    def run_daily_check(self, recipient_email, smtp_config):
+    def run(self, recipient_email, smtp_config, check_date=None):
+        """
+        Ejecuta el análisis para una fecha específica o el día actual.
+        Diseñado para ejecución manual o automatizada vía crontab.
+        """
         country_name = self.source_config.get('name', self.country_code)
         
-        today = datetime.now()
-        today_data = self.get_boe_summary(today)
+        # Determinar fecha de ejecución
+        run_date = check_date if check_date else datetime.now()
+        if isinstance(run_date, str):
+            try:
+                run_date = datetime.strptime(run_date, "%Y-%m-%d")
+            except ValueError:
+                self.logger.error(f"Formato de fecha inválido: {run_date}. Use YYYY-MM-DD")
+                return False
+
+        self.logger.info(f"Iniciando análisis para {country_name} - Fecha: {run_date.strftime('%Y-%m-%d')}")
+        
+        # 1. Obtener sumario
+        today_data = self.get_boe_summary(run_date)
         
         if not today_data:
-            self.logger.error("No se pudieron obtener datos hoy")
-            self.db.log_execution("error_download", 0, 0, 0, "Failed to download data")
+            self.logger.error(f"No se pudieron obtener datos para la fecha {run_date.strftime('%Y-%m-%d')}")
+            self.db.log_execution("error_download", 0, 0, 0, f"Failed to download data for {run_date.date()}")
             return False
         
+        # 2. Parsear contenido
         today_items = self.parse_boe_content(today_data['content'])
-        self.logger.info(f"Items obtenidos hoy: {len(today_items)}")
+        self.logger.info(f"Items detectados en la fuente: {len(today_items)}")
         
         if not today_items:
             self.logger.warning("No se encontraron items para procesar")
             self.db.log_execution("no_items", 0, 0, 0, "No items found in content")
             return False
         
-        # Recuperar baseline (ayer u hoy si es la primera vez)
-        yesterday = today - timedelta(days=1)
-        yesterday_items = self.load_day_data(yesterday.date())
-        
-        if not yesterday_items:
-            self.logger.info("No hay datos de ayer, buscando si ya se ejecutó hoy...")
-            yesterday_items = self.load_day_data(today.date())
-
-        # Comparar
-        comparison = self.compare_items(today_items, yesterday_items)
-        new_items = comparison['new_items']
-        
-        self.logger.info(f"Nuevos items detectados: {len(new_items)}")
-        
-        # Guardar en BD
+        # 3. Guardar en Base de Datos (solo los que no existan)
+        # La función save_publication ya maneja la verificación de duplicados
         saved_count = 0
+        new_items = []
+        
         for item in today_items:
-            if self.db.save_publication(item, today.date()):
+            if self.db.save_publication(item, run_date.date()):
                 saved_count += 1
+                new_items.append(item)
         
-        self.logger.info(f"Guardados en BD: {saved_count}")
+        self.logger.info(f"Registros nuevos guardados en BD: {saved_count}")
         
-        # Registrar ejecución
+        # 4. Registrar ejecución
         status = "success" if saved_count > 0 else "no_changes"
-        self.db.log_execution(status, len(today_items), saved_count, 0, "Check completed")
-
-        # Notificar
+        message = f"Check completed for {run_date.date()}. Found {len(today_items)}, saved {saved_count} new."
+        self.db.log_execution(status, len(today_items), saved_count, 0, message)
+        
+        # 5. Notificar si hay novedades
         if saved_count > 0:
+            self.logger.info(f"Enviando notificación por {saved_count} nuevos items...")
             self.send_email_notification(new_items, recipient_email, smtp_config, has_changes=True)
         else:
             # Opcional: Notificar aunque no haya cambios (según config)
@@ -388,6 +396,6 @@ class BOEMonitor:
             if should_notify:
                 self.send_email_notification([], recipient_email, smtp_config, has_changes=False)
             else:
-                self.logger.info("Sin novedades. No se envía correo.")
+                self.logger.info("Sin novedades detectadas. No se envía correo.")
         
         return True

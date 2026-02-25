@@ -1,0 +1,24 @@
+2026-02-25 09:22:57,666 - __main__ - INFO - ============================================================
+2026-02-25 09:22:57,666 - __main__ - INFO - INICIANDO MONITOR: ES
+2026-02-25 09:28:03,199 - __main__ - INFO - ============================================================
+2026-02-25 09:28:03,200 - __main__ - INFO - INICIANDO MONITOR: ES
+2026-02-25 09:28:05,371 - db_manager - ERROR - Error de conexión a BD: 2003: Can't connect to MySQL server on 'localhost:3306' (Errno 10061: No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión)
+2026-02-25 09:28:05,412 - boe_analyzer - INFO - Iniciando análisis para España - Fecha: 2026-02-20
+2026-02-25 09:28:05,413 - boe_analyzer - INFO - 🌍 Consultando (ES) via requests: https://www.boe.es/datosabiertos/api/boe/sumario/20260220
+2026-02-25 09:28:05,901 - boe_analyzer - INFO - Encontrados 176 elementos crudos.
+2026-02-25 09:28:05,925 - boe_analyzer - INFO - Items detectados en la fuente: 176
+2026-02-25 09:28:07,957 - db_manager - ERROR - Error de conexión a BD: 2003: Can't connect to MySQL server on 'localhost:3306' (Errno 10061: No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión)
+2026-02-25 09:28:09,979 - db_manager - ERROR - Error de conexión a BD: 2003: Can't connect to MySQL server on 'localhost:3306' (Errno 10061: No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión)
+2026-02-25 09:28:12,008 - db_manager - ERROR - Error de conexión a BD: 2003: Can't connect to MySQL server on 'localhost:3306' (Errno 10061: No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión)
+2026-02-25 09:28:14,055 - db_manager - ERROR - Error de conexión a BD: 2003: Can't connect to MySQL server on 'localhost:3306' (Errno 10061: No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión)
+2026-02-25 09:28:36,896 - __main__ - INFO - ============================================================
+2026-02-25 09:28:36,897 - __main__ - INFO - INICIANDO MONITOR: ES
+2026-02-25 09:28:39,058 - db_manager - ERROR - Error de conexión a BD: 2003: Can't connect to MySQL server on '10.10.207.157:3306' (Errno 10061: No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión)
+2026-02-25 09:28:39,104 - boe_analyzer - INFO - Iniciando análisis para España - Fecha: 2026-02-20
+2026-02-25 09:28:39,104 - boe_analyzer - INFO - 🌍 Consultando (ES) via requests: https://www.boe.es/datosabiertos/api/boe/sumario/20260220
+2026-02-25 09:28:39,443 - boe_analyzer - INFO - Encontrados 176 elementos crudos.
+2026-02-25 09:28:39,462 - boe_analyzer - INFO - Items detectados en la fuente: 176
+2026-02-25 09:28:41,503 - db_manager - ERROR - Error de conexión a BD: 2003: Can't connect to MySQL server on '10.10.207.157:3306' (Errno 10061: No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión)
+2026-02-25 09:28:43,553 - db_manager - ERROR - Error de conexión a BD: 2003: Can't connect to MySQL server on '10.10.207.157:3306' (Errno 10061: No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión)
+2026-02-25 09:28:45,587 - db_manager - ERROR - Error de conexión a BD: 2003: Can't connect to MySQL server on '10.10.207.157:3306' (Errno 10061: No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión)
+2026-02-25 09:28:47,610 - db_manager - ERROR - Error de conexión a BD: 2003: Can't connect to MySQL server on '10.10.207.157:3306' (Errno 10061: No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión)

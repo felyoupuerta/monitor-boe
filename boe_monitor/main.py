@@ -45,16 +45,26 @@ def load_config(config_file='config.json'):
 def get_secure_config():
     """Construye la configuración segura combinando JSON y variables de entorno"""
     
-    # Validar que existan las credenciales críticas
-    if not os.getenv("SMTP_PASSWORD") or not os.getenv("DB_PASSWORD"):
-        print("❌ ERROR CRÍTICO: No se encontraron las contraseñas en el archivo .env")
-        print("Asegúrate de haber creado el archivo .env con DB_PASSWORD y SMTP_PASSWORD")
-        sys.exit(1)
+    db_pass = os.getenv("DB_PASSWORD")
+    smtp_pass = os.getenv("SMTP_PASSWORD")
+
+    # Si faltan las contraseñas, avisamos pero no matamos el proceso inmediatamente 
+    # si el usuario solo quiere ver la ayuda o listar fuentes.
+    # Pero para la ejecución normal, las necesitaremos.
+    missing = []
+    if not db_pass: missing.append("DB_PASSWORD")
+    if not smtp_pass: missing.append("SMTP_PASSWORD")
+
+    if missing:
+        print(f"⚠️  ADVERTENCIA: Faltan variables de entorno: {', '.join(missing)}")
+        print("Asegúrate de configurar el archivo .env con las credenciales necesarias.")
+        # No salimos aquí, dejamos que falle al intentar conectar a la DB o SMTP 
+        # para dar más flexibilidad en pruebas locales sin persistencia.
 
     db_config = {
         "host": os.getenv("DB_HOST", "localhost"),
         "user": os.getenv("DB_USER", "root"),
-        "password": os.getenv("DB_PASSWORD", ""),
+        "password": db_pass or "",
         "database": os.getenv("DB_NAME", "boe_monitor"),
         "port": int(os.getenv("DB_PORT", 3306))
     }
@@ -63,7 +73,7 @@ def get_secure_config():
         "server": os.getenv("SMTP_SERVER", "smtp.gmail.com"),
         "port": int(os.getenv("SMTP_PORT", 587)),
         "username": os.getenv("SMTP_USER", ""),
-        "password": os.getenv("SMTP_PASSWORD", "")
+        "password": smtp_pass or ""
     }
 
     return db_config, smtp_config
@@ -71,6 +81,7 @@ def get_secure_config():
 def main():
     parser = argparse.ArgumentParser(description="Monitor de Boletines Oficiales")
     parser.add_argument('--country', '-c', help='Código del país a analizar (ej: es, fr)')
+    parser.add_argument('--date', '-d', help='Fecha a analizar (YYYY-MM-DD), por defecto hoy')
     parser.add_argument('--list', '-l', action='store_true', help='Listar fuentes disponibles')
     parser.add_argument('country_arg', nargs='?', help='Nombre o código del país (opcional)')
     
@@ -103,7 +114,7 @@ def main():
     # Configurar Logging
     logger = setup_logging(target_country)
     logger.info("=" * 60)
-    logger.info(f"MONITOR DE BOLETINES: INICIANDO PAÍS {target_country.upper()}")
+    logger.info(f"INICIANDO MONITOR: {target_country.upper()}")
     
     # Obtener configuración segura
     db_config, smtp_config = get_secure_config()
@@ -114,19 +125,19 @@ def main():
     # Iniciar Monitor
     monitor = BOEMonitor(db_config=db_config, source_config=source_config, data_dir=data_dir)
     
-    # Sobreescribir el email del JSON con el de las variables si es necesario, 
-    # o usar el del JSON. Aquí usamos el del JSON.
     recipient_email = config.get('recipient_email', [])
     
-    success = monitor.run_daily_check(
+    # Ejecutar análisis (el método run ahora es genérico para manual/cron)
+    success = monitor.run(
         recipient_email=recipient_email,
-        smtp_config=smtp_config
+        smtp_config=smtp_config,
+        check_date=args.date
     )
     
     if success:
-        logger.info("Proceso completado exitosamente")
+        logger.info("Proceso finalizado correctamente")
     else:
-        logger.warning("El proceso finalizó con advertencias")
+        logger.error("El proceso encontró errores durante la ejecución")
     
     logger.info("=" * 60)
 
